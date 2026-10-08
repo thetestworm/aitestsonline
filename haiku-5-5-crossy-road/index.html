@@ -239,7 +239,7 @@ const CONFIG = {
 
   // ---- Eagle ------------------------------------------------------
   idleEagleSeconds: 7.5,      // Idle time since the last new furthest row before the eagle takes you.
-  eagleBehindMargin: 0.5,     // Extra tiles below the camera bottom edge before the eagle triggers.
+  eagleBehindMargin: 0.1,     // NDC units below the bottom screen edge (y = -1) before the eagle triggers.
 
   // ---- Camera -----------------------------------------------------
   cameraHalfHeight: 5.2,      // Orthographic half height in world units on wide screens.
@@ -1563,16 +1563,18 @@ function rowDesc(row) {
    stateless probe lanes that read the descriptor for any row.
    ================================================================= */
 
-// Direction name to (row delta, column delta).
+// Direction name to (row delta, column delta). The camera looks down -x, so
+// world +x is screen-left: Left maps to +col and Right maps to -col.
 const DIRS = {
   up: [1, 0],
   down: [-1, 0],
-  left: [0, -1],
-  right: [0, 1],
+  left: [0, 1],
+  right: [0, -1],
 };
 
 // Facing angle (radians around y) for each direction. Chicken faces +z at 0.
-const FACE_ANGLE = { up: 0, down: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 };
+// Left faces +x (screen-left) and right faces -x (screen-right).
+const FACE_ANGLE = { up: 0, down: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 };
 
 // Static block: tree wall behind the start, world edges, and obstacles.
 function isBlocked(row, col) {
@@ -1702,20 +1704,15 @@ function landHop(t) {
   P.landT = t;
   if (desc.type === 'river') {
     const lane = queryLane(desc);
-    let found = null;
-    if (lane.supportAt(h.toX, t)) {
-      found = h.toX;
-    } else {
-      // Snap to the nearest tile that a log or pad covers at this moment.
-      for (let k = 1; k <= 2 && found === null; k++) {
-        if (h.toX - k >= CONFIG.colMin && lane.supportAt(h.toX - k, t)) found = h.toX - k;
-        else if (h.toX + k <= CONFIG.colMax && lane.supportAt(h.toX + k, t)) found = h.toX + k;
-      }
-    }
-    if (found === null) {
+    // Land on exactly the aimed column. Uncovered water drowns there; no neighbour snapping.
+    if (!lane.supportAt(h.toX, t)) {
+      P.riding = false;
+      P.rideIdx = -1;
+      P.x = h.toX;
       killPlayer('drown');
       return;
     }
+    const found = h.toX;
     const idx = supportIndex(desc, found, t);
     P.riding = true;
     P.rideIdx = idx;
@@ -1846,7 +1843,8 @@ function playerVisual(t) {
   }
   m.position.set(x, y, z);
   m.scale.set(sx, sy, sz);
-  m.rotation.y = FACE_ANGLE[P.faceDir];
+  // Clear the tumble pose left by swept or train deaths; only facing (y) is kept.
+  m.rotation.set(0, FACE_ANGLE[P.faceDir], 0);
   m.visible = true;
 }
 
@@ -1889,9 +1887,17 @@ function cameraStep(dt) {
   CAM.x = lerp(CAM.x, wantX, Math.min(1, 4 * dt));
 }
 
-// Row coordinate of the bottom edge of the screen.
-function cameraBottomZ() {
-  return CAM.z - CAM.extZ;
+// Scratch vector for the screen test below (no allocation per frame).
+const SCREEN_SCRATCH = new THREE.Vector3();
+
+// True when the player's tile centre projects below the bottom screen edge
+// (NDC y under -1 - CONFIG.eagleBehindMargin). Exact for any aspect and camera offset.
+function playerBelowScreen() {
+  const c = CAM.camera;
+  cameraApply();            // Sync the rig with the current camera target.
+  c.updateMatrixWorld();    // Refresh matrixWorldInverse for the projection.
+  SCREEN_SCRATCH.set(PLAYER.x, 0, PLAYER.row).project(c);
+  return SCREEN_SCRATCH.y < -1 - CONFIG.eagleBehindMargin;
 }
 
 // Fit the orthographic frustum to the canvas size. Keeps all nine columns visible.
@@ -2784,7 +2790,7 @@ function simStep() {
   if (G.mode === 'playing') {
     if (G.idleTime > CONFIG.idleEagleSeconds) {
       killPlayer('eagle');
-    } else if (PLAYER.row < cameraBottomZ() + CONFIG.eagleBehindMargin) {
+    } else if (playerBelowScreen()) {
       killPlayer('eagle');
     }
   }
@@ -2835,7 +2841,11 @@ function worldReset(seedValue, mode) {
   G.pausedFrom = 'playing';
   lastHonkT = -10;
   playerReset();
+  // Clear any death-visual pose (scale, height, tumble) left by the previous run.
   PLAYER.mesh.visible = true;
+  PLAYER.mesh.scale.set(1, 1, 1);
+  PLAYER.mesh.position.set(0, 0, 0);
+  PLAYER.mesh.rotation.set(0, FACE_ANGLE[PLAYER.faceDir], 0);
   cameraReset();
   DEATH.eagle.visible = false;
   fxReset();
