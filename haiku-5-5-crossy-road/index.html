@@ -1,0 +1,3059 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="description" content="Hop Lane: an endless hopper arcade game built with Three.js.">
+<title>Hop Lane</title>
+<style>
+/* ---------------------------------------------------------------
+   Theme tokens. Dark background, bright saturated accents.
+   --------------------------------------------------------------- */
+:root{
+  --accent:#ffd23f;   /* coin gold and score highlight */
+  --hop:#7dff8a;      /* fresh grass green for the top score */
+  --danger:#ff4d5e;   /* warning red for signals and game over */
+  --ink:#f6f7fb;      /* primary text colour */
+  --dim:#aab3c9;      /* secondary text colour */
+  --panel:rgba(12,16,28,.62); /* translucent HUD panel background */
+  --edge:rgba(255,255,255,.14); /* thin panel border */
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#0b1020;color:var(--ink);
+  font-family:"Arial Black",system-ui,-apple-system,"Segoe UI",sans-serif;
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none}
+
+/* ---------------------------------------------------------------
+   Shared panel look for HUD boxes.
+   --------------------------------------------------------------- */
+.panel{background:var(--panel);border:1px solid var(--edge);border-radius:12px;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  box-shadow:0 6px 18px rgba(0,0,0,.25)}
+
+/* ---------------------------------------------------------------
+   HUD: score top-left, coins and mute top-right.
+   --------------------------------------------------------------- */
+#hud-tl{position:fixed;top:14px;left:14px;padding:10px 16px;min-width:150px;pointer-events:none;z-index:5}
+#score{font-size:44px;font-weight:900;line-height:1;text-shadow:0 3px 0 rgba(0,0,0,.35)}
+#top{font-size:13px;letter-spacing:2px;color:var(--hop);margin-top:6px}
+#hud-tr{position:fixed;top:14px;right:14px;padding:10px 14px;display:flex;align-items:center;gap:12px;z-index:12}
+#coins{font-size:20px;color:var(--accent);text-shadow:0 0 8px rgba(255,210,63,.45)}
+#coins-label{font-size:10px;letter-spacing:2px;color:var(--dim);margin-right:2px}
+#mute-btn{font:inherit;font-size:11px;letter-spacing:1px;color:var(--ink);background:rgba(255,255,255,.08);
+  border:1px solid var(--edge);border-radius:8px;padding:7px 10px;cursor:pointer;min-width:84px;touch-action:manipulation}
+#mute-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------------------------------------------------------------
+   Overlays: title, game over, pause. Each is a full-screen layer.
+   --------------------------------------------------------------- */
+.overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:16px;background:rgba(6,8,16,.22);z-index:10;transition:opacity .25s ease}
+.overlay.hidden{opacity:0;pointer-events:none}
+.overlay.hidden *{pointer-events:none}
+.panel-box{padding:22px 26px;min-width:min(340px,86vw);max-width:92vw}
+
+/* Title word: chunky stacked voxel-style letters made with layered shadows. */
+#title-word{font-size:clamp(44px,11vw,96px);font-weight:900;letter-spacing:4px;line-height:1;color:#fff;
+  text-shadow:
+    0 4px 0 #d1462f,0 8px 0 #a3321f,0 12px 0 #7a2415,
+    0 16px 0 rgba(0,0,0,.25),0 0 22px rgba(255,210,63,.45)}
+#title-word span{display:inline-block}
+#title-sub{margin-top:18px;font-size:clamp(12px,3vw,16px);letter-spacing:3px;color:var(--accent);
+  animation:blink 1.4s steps(2,start) infinite}
+#title-help{margin-top:16px;font-size:11px;letter-spacing:1px;color:var(--dim);line-height:1.8}
+@keyframes blink{to{visibility:hidden}}
+
+#over-title{font-size:clamp(30px,8vw,52px);font-weight:900;letter-spacing:3px;color:var(--danger);
+  text-shadow:0 3px 0 #7a1622}
+#over-score{margin-top:16px;font-size:24px;font-weight:900}
+#over-top{margin-top:8px;font-size:16px;color:var(--hop);letter-spacing:2px}
+#over-new{margin-top:12px;font-size:18px;color:var(--accent);letter-spacing:2px;text-shadow:0 0 12px rgba(255,210,63,.7)}
+#over-new.hidden{visibility:hidden}
+
+/* Play Again button; also reachable by Space and Enter. */
+.btn{font:inherit;font-size:18px;font-weight:900;letter-spacing:2px;color:#1b1206;background:var(--accent);
+  border:0;border-radius:12px;padding:14px 30px;margin-top:24px;cursor:pointer;
+  box-shadow:0 5px 0 #b38a12,0 10px 18px rgba(0,0,0,.35);touch-action:manipulation}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 #b38a12}
+.btn:focus-visible{outline:3px solid #fff;outline-offset:3px}
+
+#pause-word{font-size:clamp(34px,9vw,60px);font-weight:900;letter-spacing:6px;color:#fff;text-shadow:0 3px 0 #2d3a66}
+#pause-help{margin-top:14px;font-size:12px;letter-spacing:1px;color:var(--dim)}
+
+/* Phones: keep HUD compact so the play area stays readable. */
+@media (max-width:520px){
+  #score{font-size:34px}
+  #hud-tl{top:10px;left:10px;padding:8px 12px}
+  #hud-tr{top:10px;right:10px;padding:8px 10px;gap:8px}
+  #coins{font-size:16px}
+  #mute-btn{min-width:70px;font-size:10px}
+}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="gl" aria-label="Hop Lane game view"></canvas>
+
+<!-- Top-left HUD: large score and the persisted top score under it. -->
+<div id="hud-tl" class="panel" aria-live="polite">
+  <div id="score">0</div>
+  <div id="top">TOP 0</div>
+</div>
+
+<!-- Top-right HUD: coin counter and the mute toggle button. -->
+<div id="hud-tr" class="panel">
+  <div><span id="coins-label">COINS</span> <span id="coins">0</span></div>
+  <button id="mute-btn" type="button">SOUND ON</button>
+</div>
+
+<!-- Title screen: shown before the first hop. -->
+<div id="screen-title" class="overlay">
+  <div class="panel-box">
+    <div id="title-word" aria-label="HOP LANE"><span>HOP</span> <span>LANE</span></div>
+    <div id="title-sub">Tap or press any key to play.</div>
+    <div id="title-help">ARROWS / WASD MOVE &middot; SWIPE OR TAP ON TOUCH<br>P OR ESC PAUSES &middot; M MUTES</div>
+  </div>
+</div>
+
+<!-- Game over screen: final score, top score, new-best banner and Play Again. -->
+<div id="screen-over" class="overlay hidden" role="dialog" aria-label="Game over">
+  <div class="panel-box">
+    <div id="over-title">GAME OVER</div>
+    <div id="over-score">Score 0</div>
+    <div id="over-top">Top 0</div>
+    <div id="over-new" class="hidden">NEW TOP SCORE!</div>
+    <button id="again-btn" class="btn" type="button">Play Again</button>
+  </div>
+</div>
+
+<!-- Pause screen: shown when the tab loses focus or P or Escape is pressed. -->
+<div id="screen-pause" class="overlay hidden">
+  <div class="panel-box">
+    <div id="pause-word">PAUSED</div>
+    <div id="pause-help">press P or click to resume</div>
+  </div>
+</div>
+
+<script type="module">
+/* =================================================================
+   HOP LANE
+   Endless hopper arcade game. Everything is box geometry in code and
+   every sound is synthesized with Web Audio. This file is one module:
+   sections appear in architecture order, each with a banner comment.
+   ================================================================= */
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* =================================================================
+   CONFIG
+   Every tunable lives here. Units: columns and rows are tiles, speeds
+   are tiles per second, times are seconds of simulation time.
+   ================================================================= */
+const CONFIG = {
+  // ---- Grid -------------------------------------------------------
+  columns: 9,                 // Playable width in tiles. Columns 0..8 are open.
+  colMin: 0,                  // Leftmost playable column index.
+  colMax: 8,                  // Rightmost playable column index (columns - 1).
+  startCol: 4,                // Column where the chicken starts.
+  startRows: 3,               // Rows 0..startRows-1 are the start meadow (no obstacles in the centre).
+  startClearMin: 3,           // First obstacle-free column in the start meadow (inclusive).
+  startClearMax: 5,           // Last obstacle-free column in the start meadow (inclusive).
+  wallVisualRows: 14,         // Visual-only tree wall rows built behind the start (not in rows()).
+
+  // ---- Simulation clock -------------------------------------------
+  stepHz: 60,                 // Fixed simulation rate in steps per second.
+  maxFrameDt: 0.25,           // Largest slice of real time fed to the accumulator per frame (seconds).
+
+  // ---- Lane window (how many rows are built around the camera) -----
+  windowBehind: 14,           // Rows kept built behind the camera centre.
+  windowAhead: 28,            // Rows kept built ahead of the camera centre.
+
+  // ---- Generator chunk sizes (rows) -------------------------------
+  grassChunkMin: 1,           // Shortest grass chunk between hazard chunks.
+  grassChunkMax: 5,           // Longest grass chunk between hazard chunks.
+  roadChunkMin: 1,            // Shortest road chunk (lanes).
+  roadChunkMax: 6,            // Longest road chunk (lanes) at high difficulty.
+  riverChunkMin: 1,           // Shortest river chunk (lanes).
+  riverChunkMax: 5,           // Longest river chunk (lanes).
+  railChunkMin: 1,            // Shortest rail chunk (tracks).
+  railChunkMax: 2,            // Longest rail chunk (tracks).
+  difficultyRows: 220,        // Row index at which difficulty reaches its maximum.
+
+  // ---- Grass obstacles and coins ----------------------------------
+  obstaclesMax: 5,            // Most static blockers in one grass row (rule R1).
+  freeColumnsMin: 3,          // Fewest free columns left in a grass row (rule R1).
+  coinChanceGrass: 0.12,      // Chance per grass row to place one coin on a free tile.
+  coinChanceLog: 0.10,        // Chance per log that carries a coin.
+
+  // ---- Road lanes -------------------------------------------------
+  roadSpeedMin: 1.1,          // Slowest car lane speed in tiles per second.
+  roadSpeedStart: 1.6,        // Typical car speed on the first road row.
+  roadSpeedMax: 5.2,          // Fastest car lane speed (keeps a hop inside a gap).
+  roadSpeedPerRow: 0.010,     // Extra car speed per row of difficulty.
+  truckLaneChance: 0.25,      // Chance a road lane is a truck lane.
+  mixedLaneChance: 0.25,      // Chance a road lane mixes cars and trucks.
+  carGapMin: 2.5,             // Smallest empty gap between vehicles in tiles (rule R3).
+  carGapMax: 4.4,             // Largest empty gap between vehicles in tiles.
+  vehicleSpanInset: 0.15,     // Hit-box inset on each side of a vehicle footprint (fair collisions).
+
+  // ---- River lanes -----------------------------------------------
+  logSpeedMin: 0.9,           // Slowest log speed in tiles per second.
+  logSpeedStart: 1.1,         // Typical log speed on the first river row.
+  logSpeedMax: 3.0,           // Fastest log speed in tiles per second.
+  logSpeedPerRow: 0.008,      // Extra log speed per row of difficulty.
+  logLengths: [2, 3, 4],      // Allowed log lengths in tiles.
+  logGapMin: 1,               // Shortest water gap between logs (tiles, rule R5).
+  logGapMax: 2,               // Longest water gap between logs (rule R5 caps runs at 2).
+  logRiderInset: 0.5,         // Distance past the playable edge before a rider is swept off.
+  padChance: 0.35,            // Chance a river lane uses lily pads instead of logs.
+
+  // ---- Rail lanes -------------------------------------------------
+  trainSpeedMin: 14,          // Slowest train speed in tiles per second.
+  trainSpeedMax: 20,          // Fastest train speed in tiles per second.
+  trainCarsMin: 3,            // Fewest rail cars behind the locomotive.
+  trainCarsMax: 8,            // Most rail cars behind the locomotive.
+  trainTileLength: 1.15,      // Length of one car or locomotive in tiles.
+  trainEntryMargin: 6,        // Columns beyond the playable edge where trains enter and exit.
+  trainWarning: 1.2,          // Seconds of warning before a train front reaches the entry point.
+  trainGapMin: 3.0,           // Smallest time between consecutive train passages (rule R4).
+  trainGapMax: 7.0,           // Largest time between passages at the start of the run.
+  trainGapMaxFloor: 4.5,      // Gap ceiling at high difficulty so trains come more often.
+  trainHorizon: 600,          // Seconds of train schedule generated per track.
+
+  // ---- Player hop -------------------------------------------------
+  hopDuration: 0.14,          // Seconds for one tile hop (spec range 0.12 to 0.15).
+  hopHeight: 0.42,            // Peak height of the hop arc in tiles.
+  squashSeconds: 0.07,        // Duration of the anticipation squash before lift-off.
+  landSeconds: 0.08,          // Duration of the landing squash.
+  bumpSeconds: 0.14,          // Duration of the blocked-move bump.
+  ridingBobAmp: 0.03,         // Vertical bob amplitude while riding a log or pad.
+  pickupRadius: 0.5,          // Tile distance for collecting a coin while riding.
+
+  // ---- Eagle ------------------------------------------------------
+  idleEagleSeconds: 7.5,      // Idle time since the last new furthest row before the eagle takes you.
+  eagleBehindMargin: 0.5,     // Extra tiles below the camera bottom edge before the eagle triggers.
+
+  // ---- Camera -----------------------------------------------------
+  cameraHalfHeight: 5.2,      // Orthographic half height in world units on wide screens.
+  cameraHalfWidth: 6.4,       // Minimum orthographic half width so all nine columns fit.
+  cameraPitchRise: 9,         // Camera height above the look point.
+  cameraPitchRun: 10,         // Horizontal offset along z of the camera from its look point.
+  cameraSideRun: 6,           // Horizontal offset along x of the camera (angles the view from the side).
+  cameraLead: 2.5,            // Rows the camera keeps ahead of the player.
+  cameraFollowRate: 3.2,      // Per-second lerp rate that pulls the camera forward toward the player.
+  cameraXFollow: 0.35,        // Fraction of player x offset the camera follows sideways.
+  cameraAutoBase: 0.55,       // Auto-advance speed in rows per second at score 0.
+  cameraAutoPerRow: 0.0035,   // Extra auto-advance speed per score row.
+  cameraAutoMax: 1.5,         // Cap on auto-advance speed in rows per second.
+
+  // ---- Death animations (seconds) ---------------------------------
+  squashDuration: 0.5,        // Squash death total length.
+  drownDuration: 0.95,        // Drown death total length.
+  sweptDuration: 1.05,        // Swept-off-edge death total length.
+  trainDuration: 0.95,        // Train death total length.
+  eagleDuration: 1.6,         // Eagle death total length.
+
+  // ---- Rendering --------------------------------------------------
+  shadowMapSize: 2048,        // Shadow map resolution in pixels (power of two).
+  pixelRatioMax: 2,           // Highest device pixel ratio used for the canvas.
+  coinSpin: 2.8,              // Coin spin speed in radians per second.
+  coinBounce: 0.12,           // Coin bob height in tiles.
+
+  // ---- Persistence keys -------------------------------------------
+  keyTop: 'hopLane.topScore', // localStorage key for the best score.
+  keyCoins: 'hopLane.coins',  // localStorage key for the coin total.
+  keyMuted: 'hopLane.muted',  // localStorage key for the mute flag ('1' or '0').
+
+  // ---- Audio ------------------------------------------------------
+  masterGain: 0.32,           // Overall output gain of the synth.
+  maxVoices: 12,              // Most simultaneous synthesized voices.
+};
+
+// Derived constants that other parts read. Kept below CONFIG so every
+// tunable above stays in one place.
+const DT = 1 / CONFIG.stepHz;          // Fixed simulation step in seconds.
+const TAU = Math.PI * 2;               // Full turn in radians.
+const WRAP_BASE = -12;                 // Left edge of the moving-object domain in columns.
+const WRAP_PERIOD = 33;                // Width of the moving-object domain in columns.
+const TRAIN_REF_CARS = 8;              // Car count used to build the shared train model.
+
+/* -----------------------------------------------------------------
+   Game state. Plain object, mutated by the sim and read by the UI.
+   ----------------------------------------------------------------- */
+const G = {
+  mode: 'title',        // 'title' | 'playing' | 'dying' | 'gameover' | 'paused'
+  simTime: 0,           // Sim clock in seconds (advances only in title, playing, dying).
+  accum: 0,             // Fixed-step accumulator in seconds.
+  score: 0,             // Furthest row reached this run.
+  maxRow: 0,            // Same as score; kept as the furthest-row counter.
+  topScore: 0,          // Best score ever, persisted.
+  coins: 0,             // Coin total, persisted.
+  idleTime: 0,          // Seconds since the last new furthest row.
+  muted: false,         // Mute flag, persisted.
+  deathType: null,      // Null or one of the death type strings.
+  deathT0: 0,           // Sim time when the current death began.
+  pausedFrom: 'playing',// Mode to return to when unpausing.
+  newTop: false,        // True when this run beat the stored top score.
+  runSeed: 1,           // Seed of the current world.
+  runCoins: 0,          // Coins collected during this run (added to G.coins as they are picked up).
+};
+
+/* -----------------------------------------------------------------
+   Seeded PRNG (mulberry32). The only random source in the game.
+   ----------------------------------------------------------------- */
+let rngState = 1;
+
+// Reseed the PRNG. Same seed gives the same world.
+function seedRng(n) {
+  rngState = (n >>> 0) || 1;
+}
+
+// Next float in [0, 1).
+function rand() {
+  rngState = (rngState + 0x6d2b79f5) >>> 0;
+  let t = rngState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+// Float in [a, b).
+function randRange(a, b) {
+  return a + (b - a) * rand();
+}
+
+// Integer in [a, b] inclusive.
+function randInt(a, b) {
+  return a + Math.floor(rand() * (b - a + 1));
+}
+
+// Random element of an array.
+function pick(arr) {
+  return arr[Math.floor(rand() * arr.length)];
+}
+
+/* -----------------------------------------------------------------
+   Small math helpers. None of these allocate.
+   ----------------------------------------------------------------- */
+function clamp(v, a, b) {
+  return v < a ? a : (v > b ? b : v);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+// Map any position into the moving-object domain [WRAP_BASE, WRAP_BASE + WRAP_PERIOD).
+function wrapPos(p) {
+  let q = (p - WRAP_BASE) % WRAP_PERIOD;
+  if (q < 0) q += WRAP_PERIOD;
+  return q + WRAP_BASE;
+}
+
+/* -----------------------------------------------------------------
+   Persistence. Every localStorage touch is wrapped so private windows
+   and blocked storage still run the game.
+   ----------------------------------------------------------------- */
+function storeGet(key, fallback) {
+  try {
+    const v = window.localStorage.getItem(key);
+    return v === null ? fallback : v;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function storeSet(key, value) {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch (e) {
+    /* storage unavailable: keep running with in-memory values */
+  }
+}
+
+// Read the persisted values into G once at load.
+function loadPersisted() {
+  const top = parseInt(storeGet(CONFIG.keyTop, '0'), 10);
+  const coins = parseInt(storeGet(CONFIG.keyCoins, '0'), 10);
+  G.topScore = Number.isFinite(top) && top > 0 ? top : 0;
+  G.coins = Number.isFinite(coins) && coins > 0 ? coins : 0;
+  G.muted = storeGet(CONFIG.keyMuted, '0') === '1';
+}
+
+/* =================================================================
+   ASSET FACTORIES (voxel models built from boxes)
+   Every model is built once and shared. Objects that need their own
+   motion (vehicles, logs, coins) get a Mesh that shares the geometry.
+   ================================================================= */
+
+// Materials shared by every lane and model. Created once, never per frame.
+const MATS = {
+  // Vertex-coloured flat-shaded material used by all merged voxel models.
+  vc: new THREE.MeshLambertMaterial({ vertexColors: true }),
+  // Ground tiles: two greens alternate row by row.
+  tileGrassA: new THREE.MeshLambertMaterial({ color: 0x6fd152 }),
+  tileGrassB: new THREE.MeshLambertMaterial({ color: 0x5fc344 }),
+  // Dark asphalt for road rows.
+  tileRoad: new THREE.MeshLambertMaterial({ color: 0x3a3e4b }),
+  // Bright blue river water.
+  tileRiver: new THREE.MeshLambertMaterial({ color: 0x2f9ff0 }),
+  // Gravel bed under the tracks.
+  tileRail: new THREE.MeshLambertMaterial({ color: 0x8c8577 }),
+  // Darkened terrain beyond the playable columns and the tree wall.
+  tileEdge: new THREE.MeshLambertMaterial({ color: 0x24402e }),
+  // Road dashes and small white accents.
+  dash: new THREE.MeshLambertMaterial({ color: 0xf4f4f4 }),
+  // Lighter water strips that show movement on river rows.
+  wave: new THREE.MeshLambertMaterial({ color: 0x7cc9ff }),
+  // Brown railroad ties.
+  tie: new THREE.MeshLambertMaterial({ color: 0x6d4a2e }),
+  // Steel rails.
+  steel: new THREE.MeshLambertMaterial({ color: 0xc3cad6 }),
+  // Lily pad green.
+  pad: new THREE.MeshLambertMaterial({ color: 0x3fbf5a }),
+  // Gold coin material.
+  coin: new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x3a2a00 }),
+  // Signal post paint.
+  post: new THREE.MeshLambertMaterial({ color: 0x5b6170 }),
+};
+
+// Shared geometries for tiles and strips. Pivot is the top surface at y = 0.
+const GEO = {
+  // One ground tile, 1 tile deep (z) and wide in x. Lanes scale x to span the view.
+  tile: new THREE.BoxGeometry(1, 0.2, 1).translate(0, -0.1, 0),
+  // Blocked terrain block beside the playable area; taller than ground.
+  edge: new THREE.BoxGeometry(1, 0.7, 1).translate(0, 0.35, 0),
+  // A short strip of road dashes spanning columns -8..16, sitting on the lane boundary.
+  dashStrip: null,
+  // Water wave streak, one per wave mesh.
+  wave: new THREE.BoxGeometry(1.2, 0.02, 0.07).translate(0, 0.01, 0),
+  // Railroad tie strip spanning columns -8..16.
+  tieStrip: null,
+  // Rail strip: two long steel bars over the tie strip.
+  railStrip: null,
+};
+
+// Build a box part with a per-vertex colour, offset to (x, y, z).
+function boxPart(w, h, d, x, y, z, hex) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  g.translate(x, y, z);
+  const count = g.attributes.position.count;
+  const colors = new Float32Array(count * 3);
+  const c = new THREE.Color(hex);
+  for (let i = 0; i < count; i++) {
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return g;
+}
+
+// Merge box parts into one geometry and free the inputs.
+function mergeOf(parts) {
+  const merged = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  return merged;
+}
+
+// Wrap a merged geometry in a shadow-casting mesh using the vertex-colour material.
+function voxelMesh(geo) {
+  const m = new THREE.Mesh(geo, MATS.vc);
+  m.castShadow = true;
+  m.receiveShadow = false;
+  return m;
+}
+
+/* -----------------------------------------------------------------
+   Chicken: white body, red comb, orange beak and feet, black eyes.
+   Built facing +z. Origin is at the feet on the ground.
+   ----------------------------------------------------------------- */
+function makeChickenGeo() {
+  const W = '#fbfbfb', R = '#e0352b', O = '#ff9a1f', K = '#141414', WING = '#e6e2ea';
+  return mergeOf([
+    boxPart(0.62, 0.46, 0.56, 0, 0.42, 0, W),        // body
+    boxPart(0.36, 0.34, 0.36, 0, 0.78, 0.08, W),     // head
+    boxPart(0.12, 0.16, 0.22, 0, 0.66, -0.36, W),    // tail
+    boxPart(0.14, 0.12, 0.2, 0, 0.99, 0.08, R),      // comb
+    boxPart(0.08, 0.14, 0.07, 0, 0.66, 0.29, R),     // wattle
+    boxPart(0.12, 0.1, 0.14, 0, 0.76, 0.3, O),       // beak
+    boxPart(0.07, 0.07, 0.04, -0.1, 0.84, 0.27, K),  // left eye
+    boxPart(0.07, 0.07, 0.04, 0.1, 0.84, 0.27, K),   // right eye
+    boxPart(0.1, 0.07, 0.18, -0.13, 0.04, 0.02, O),  // left foot
+    boxPart(0.1, 0.07, 0.18, 0.13, 0.04, 0.02, O),   // right foot
+    boxPart(0.06, 0.2, 0.3, -0.33, 0.4, 0, WING),    // left wing
+    boxPart(0.06, 0.2, 0.3, 0.33, 0.4, 0, WING),     // right wing
+  ]);
+}
+
+/* -----------------------------------------------------------------
+   Cars: built facing +x and centred on x = 0. Footprint is one tile.
+   ----------------------------------------------------------------- */
+function makeCarGeo(body, cabin, roofExtra) {
+  const parts = [
+    boxPart(0.9, 0.3, 0.6, 0, 0.3, 0, body),           // lower body
+    boxPart(0.52, 0.26, 0.52, -0.04, 0.56, 0, cabin),  // cabin
+    boxPart(0.06, 0.12, 0.5, 0.45, 0.28, 0, '#fff6c2'),// headlights (front)
+    boxPart(0.06, 0.12, 0.5, -0.45, 0.28, 0, '#ff3b30'),// tail lights (back)
+    boxPart(0.16, 0.14, 0.08, -0.26, 0.08, 0.3, '#1d1d1f'),  // wheel
+    boxPart(0.16, 0.14, 0.08, 0.26, 0.08, 0.3, '#1d1d1f'),   // wheel
+    boxPart(0.16, 0.14, 0.08, -0.26, 0.08, -0.3, '#1d1d1f'), // wheel
+    boxPart(0.16, 0.14, 0.08, 0.26, 0.08, -0.3, '#1d1d1f'),  // wheel
+  ];
+  if (roofExtra) parts.push(roofExtra);
+  return mergeOf(parts);
+}
+
+/* -----------------------------------------------------------------
+   Trucks: box trucks (length 2) and semis (length 3) with separate cab
+   and trailer, centred on x = 0 and facing +x.
+   ----------------------------------------------------------------- */
+function makeBoxTruckGeo() {
+  return mergeOf([
+    boxPart(1.3, 0.85, 0.7, -0.35, 0.55, 0, '#f2f2f2'),   // trailer box
+    boxPart(0.1, 0.3, 0.6, -0.35, 0.5, 0, '#e5483b'),     // trailer stripe
+    boxPart(0.62, 0.55, 0.66, 0.7, 0.34, 0, '#3d7be8'),   // cab
+    boxPart(0.06, 0.18, 0.5, 1.02, 0.4, 0, '#fff6c2'),    // headlights
+    boxPart(0.16, 0.14, 0.08, -0.6, 0.08, 0.3, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, -0.6, 0.08, -0.3, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, 0.7, 0.08, 0.3, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, 0.7, 0.08, -0.3, '#1d1d1f'),
+  ]);
+}
+
+function makeSemiGeo() {
+  return mergeOf([
+    boxPart(2.2, 0.95, 0.76, -0.4, 0.6, 0, '#ffa53b'),    // trailer
+    boxPart(0.7, 0.62, 0.7, 1.1, 0.4, 0, '#d6453d'),      // cab
+    boxPart(0.12, 0.24, 0.6, 1.47, 0.38, 0, '#fff6c2'),   // headlights
+    boxPart(0.16, 0.14, 0.08, -1.0, 0.08, 0.32, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, -1.0, 0.08, -0.32, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, 0.2, 0.08, 0.32, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, 0.2, 0.08, -0.32, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, 1.0, 0.08, 0.32, '#1d1d1f'),
+    boxPart(0.16, 0.14, 0.08, 1.0, 0.08, -0.32, '#1d1d1f'),
+  ]);
+}
+
+/* -----------------------------------------------------------------
+   Logs: one geometry per length, centred on x = 0, length = len tiles.
+   ----------------------------------------------------------------- */
+function makeLogGeo(len) {
+  return mergeOf([
+    boxPart(len, 0.46, 0.8, 0, 0.12, 0, '#8a5a2b'),        // bark body
+    boxPart(len - 0.2, 0.04, 0.5, 0, 0.36, 0, '#b07a3f'),  // lighter top
+    boxPart(0.06, 0.3, 0.5, len / 2 - 0.1, 0.12, 0, '#6e4520'), // end ring
+  ]);
+}
+
+/* -----------------------------------------------------------------
+   Trees and boulders. Obstacles are one tile wide.
+   ----------------------------------------------------------------- */
+function makeTreeGeo(variant) {
+  const trunk = boxPart(0.22, 0.5, 0.22, 0, 0.25, 0, '#6b4226');
+  const leaf = variant === 0 ? '#2e9e4a' : (variant === 1 ? '#3bb55a' : '#23843d');
+  const parts = [trunk];
+  if (variant === 0) {                       // tallest, three-tier tree
+    parts.push(boxPart(0.9, 0.45, 0.9, 0, 0.72, 0, leaf));
+    parts.push(boxPart(0.66, 0.42, 0.66, 0, 1.1, 0, leaf));
+    parts.push(boxPart(0.42, 0.34, 0.42, 0, 1.44, 0, '#48c765'));
+  } else if (variant === 1) {                // medium, two-tier tree
+    parts.push(boxPart(0.84, 0.42, 0.84, 0, 0.7, 0, leaf));
+    parts.push(boxPart(0.56, 0.36, 0.56, 0, 1.08, 0, '#48c765'));
+  } else {                                   // short, round-ish bush tree
+    parts.push(boxPart(0.7, 0.5, 0.7, 0, 0.72, 0, leaf));
+  }
+  return mergeOf(parts);
+}
+
+function makeBoulderGeo() {
+  return mergeOf([
+    boxPart(0.78, 0.5, 0.72, 0, 0.27, 0, '#9aa1ad'),
+    boxPart(0.46, 0.22, 0.42, 0.1, 0.56, -0.05, '#b3bac6'),
+  ]);
+}
+
+/* -----------------------------------------------------------------
+   Train: locomotive plus cars. Built at reference length TRAIN_REF_CARS
+   and scaled along x per train. Front faces +x.
+   ----------------------------------------------------------------- */
+function makeTrainGeo() {
+  const parts = [];
+  const refLen = (1 + TRAIN_REF_CARS) * CONFIG.trainTileLength;
+  const cars = ['#2fa3a3', '#ff8a3d', '#f4f1e8', '#7b5bd6'];
+  // Cars run from the back (-x) to the locomotive at the front (+x).
+  for (let i = 0; i < TRAIN_REF_CARS; i++) {
+    const cx = -refLen / 2 + CONFIG.trainTileLength * (i + 0.5);
+    parts.push(boxPart(CONFIG.trainTileLength * 0.92, 0.9, 0.82, cx, 0.62, 0, cars[i % cars.length]));
+    parts.push(boxPart(CONFIG.trainTileLength * 0.7, 0.08, 0.86, cx, 1.1, 0, '#2a2a2e')); // roof strip
+  }
+  const frontX = refLen / 2 - CONFIG.trainTileLength / 2;
+  parts.push(boxPart(CONFIG.trainTileLength, 1.1, 0.9, frontX, 0.7, 0, '#d6453d'));          // locomotive body
+  parts.push(boxPart(0.6, 0.5, 0.92, frontX - 0.2, 1.4, 0, '#2b2d36'));                      // cab
+  parts.push(boxPart(0.12, 0.14, 0.2, refLen / 2, 0.8, 0.22, '#fff6c2'));                    // headlamp
+  parts.push(boxPart(0.12, 0.14, 0.2, refLen / 2, 0.8, -0.22, '#fff6c2'));                   // headlamp
+  parts.push(boxPart(0.3, 0.14, 0.04, frontX, 1.5, 0.46, '#ffd23f'));                        // nameplate
+  return mergeOf(parts);
+}
+
+/* -----------------------------------------------------------------
+   Eagle: large voxel bird with separate wings so they can flap.
+   Built facing +z with its head toward the top of the screen.
+   ----------------------------------------------------------------- */
+function makeEagleParts() {
+  const body = voxelMesh(mergeOf([
+    boxPart(0.9, 0.7, 1.2, 0, 0.6, 0, '#4a2f1d'),        // body
+    boxPart(0.6, 0.6, 0.6, 0, 1.0, 0.55, '#f3eee4'),     // white head
+    boxPart(0.26, 0.2, 0.3, 0, 1.0, 0.98, '#ffb020'),    // hooked beak
+    boxPart(0.2, 0.18, 0.2, -0.22, 0.2, 0.1, '#ffb020'), // talon left
+    boxPart(0.2, 0.18, 0.2, 0.22, 0.2, 0.1, '#ffb020'),  // talon right
+    boxPart(0.5, 0.18, 0.5, 0, 0.12, -0.7, '#4a2f1d'),   // tail base
+  ]));
+  const wingL = voxelMesh(mergeOf([boxPart(2.4, 0.14, 1.0, -1.2, 0, 0, '#5b3a22')]));
+  const wingR = voxelMesh(mergeOf([boxPart(2.4, 0.14, 1.0, 1.2, 0, 0, '#5b3a22')]));
+  wingL.position.set(-0.4, 0.9, -0.1);
+  wingR.position.set(0.4, 0.9, -0.1);
+  const g = new THREE.Group();
+  g.add(body, wingL, wingR);
+  g.userData = { body, wingL, wingR };
+  return g;
+}
+
+/* -----------------------------------------------------------------
+   Coin: a gold disc facing the camera. Spins around y in the coin's group.
+   ----------------------------------------------------------------- */
+function makeCoinMesh() {
+  const g = new THREE.CylinderGeometry(0.3, 0.3, 0.08, 14);
+  g.rotateX(Math.PI / 2);
+  const m = new THREE.Mesh(g, MATS.coin);
+  m.castShadow = true;
+  return m;
+}
+
+/* -----------------------------------------------------------------
+   Lily pad: flat round disc, one per pad column.
+   ----------------------------------------------------------------- */
+const PAD_GEO = new THREE.CylinderGeometry(0.4, 0.4, 0.08, 14);
+
+/* -----------------------------------------------------------------
+   Railroad signal: a grey post with a lamp that flashes red.
+   ----------------------------------------------------------------- */
+function makeSignalGroup() {
+  const g = new THREE.Group();
+  const postMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.1).translate(0, 0.75, 0), MATS.post);
+  postMesh.castShadow = true;
+  const lampMat = new THREE.MeshLambertMaterial({ color: 0x4a0d12, emissive: 0x000000 });
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.2).translate(0, 1.6, 0), lampMat);
+  lamp.castShadow = false;
+  g.add(postMesh, lamp);
+  g.userData = { post: postMesh, lamp, lampMat };
+  return g;
+}
+
+// Build the shared models once. Called from the init step.
+const MODELS = {};
+function buildModels() {
+  MODELS.chicken = voxelMesh(makeChickenGeo());
+  MODELS.cars = {
+    compact: makeCarGeo('#e5483b', '#9fd8ff', null),
+    sedan: makeCarGeo('#3d7be8', '#b9e4ff', null),
+    taxi: makeCarGeo('#ffc83d', '#a6dcff', boxPart(0.3, 0.12, 0.3, 0, 0.78, 0, '#fff6c2')),
+    police: makeCarGeo('#f6f6f6', '#7fc3ff', boxPart(0.46, 0.1, 0.22, 0, 0.8, 0, '#2c6dff')),
+  };
+  MODELS.trucks = {
+    box: makeBoxTruckGeo(),
+    semi: makeSemiGeo(),
+  };
+  MODELS.logs = {};
+  for (const len of CONFIG.logLengths) MODELS.logs[len] = makeLogGeo(len);
+  MODELS.trees = [makeTreeGeo(0), makeTreeGeo(1), makeTreeGeo(2)];
+  MODELS.boulder = makeBoulderGeo();
+  MODELS.train = makeTrainGeo();
+  MODELS.eagle = makeEagleParts();
+  MODELS.coin = makeCoinMesh();
+  // Strips built once; lanes reuse them.
+  GEO.dashStrip = mergeOf(dashParts());
+  GEO.tieStrip = mergeOf(tieParts());
+  GEO.railStrip = mergeOf([
+    boxPart(24, 0.06, 0.1, 4, 0.06, -0.26, '#c3cad6'),
+    boxPart(24, 0.06, 0.1, 4, 0.06, 0.26, '#c3cad6'),
+  ]);
+}
+
+// Road dash marks: short white bars every tile across columns -8..16 on the lane edge.
+function dashParts() {
+  const parts = [];
+  for (let c = -8; c < 16; c++) {
+    parts.push(boxPart(0.5, 0.03, 0.07, c + 0.5, 0.02, 0, '#f4f4f4'));
+  }
+  return parts;
+}
+
+// Railroad ties every half tile across columns -8..16.
+function tieParts() {
+  const parts = [];
+  for (let c = -8; c < 16; c++) {
+    parts.push(boxPart(0.18, 0.04, 0.7, c + 0.5, 0.02, 0, '#6d4a2e'));
+  }
+  return parts;
+}
+
+/* =================================================================
+   OBJECT POOLING
+   Meshes and groups are taken from and returned to keyed pools. Pooled
+   objects are detached from the scene when idle and never disposed, so
+   restarts reuse them and memory stays flat.
+   ================================================================= */
+const POOLS = new Map();
+
+// Take an object from the pool named key, or build one with make().
+function takeObj(key, make) {
+  let arr = POOLS.get(key);
+  if (!arr) {
+    arr = [];
+    POOLS.set(key, arr);
+  }
+  return arr.length > 0 ? arr.pop() : make();
+}
+
+// Return an object to the pool named key.
+function giveObj(key, obj) {
+  let arr = POOLS.get(key);
+  if (!arr) {
+    arr = [];
+    POOLS.set(key, arr);
+  }
+  arr.push(obj);
+}
+
+// Count of idle pooled objects per key, for stats().
+function poolSizes() {
+  const out = {};
+  for (const [k, v] of POOLS) out[k] = v.length;
+  return out;
+}
+
+/* =================================================================
+   ANALYTIC HAZARD MOTION
+   Every moving position is a pure function of sim time (spec 2.2).
+   ================================================================= */
+
+// Left tile-centre of a log at sim time t. Wrapped inside the domain.
+function logLeft(lane, log, t) {
+  return wrapPos(log.off + lane.dir * lane.speed * t);
+}
+
+// Left edge (column space) of a vehicle footprint at sim time t.
+function vehicleLeft(lane, veh, t) {
+  return wrapPos(veh.a0 + lane.dir * lane.speed * t);
+}
+
+// Train front position at sim time t. Trains enter from just off-screen.
+function trainFront(lane, train, t) {
+  const entry = lane.dir > 0 ? -CONFIG.trainEntryMargin : (CONFIG.colMax + 1 + CONFIG.trainEntryMargin);
+  return entry + lane.dir * train.speed * (t - train.t);
+}
+
+// Index of the last train whose arrival time is <= t, or -1.
+function lastTrainIndex(trains, t) {
+  let lo = 0, hi = trains.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (trains[mid].t <= t) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
+}
+
+// Geometry of a mesh sized for a voxel model with the matching material.
+function modelGeo(key) {
+  if (key.startsWith('cars:')) return MODELS.cars[key.slice(5)];
+  if (key.startsWith('trucks:')) return MODELS.trucks[key.slice(7)];
+  throw new Error('unknown model ' + key);
+}
+
+// Shared tile material by ground name.
+function groundMat(name) {
+  if (name === 'grassA') return MATS.tileGrassA;
+  if (name === 'grassB') return MATS.tileGrassB;
+  if (name === 'road') return MATS.tileRoad;
+  if (name === 'river') return MATS.tileRiver;
+  if (name === 'gravel') return MATS.tileRail;
+  return MATS.tileEdge;
+}
+
+/* =================================================================
+   LANE BASE CLASS
+   A lane is one tile row. It owns a Group placed at z = row, pools its
+   children on teardown, and answers hazard queries for any sim time.
+   ================================================================= */
+const LANE_WIDE = 44;          // Width in columns of the shared ground tile.
+const LANE_CENTRE_X = 4;       // Centre column of the ground strips.
+
+class Lane {
+  constructor(type) {
+    this.type = type;            // 'start' | 'grass' | 'road' | 'river' | 'rail' | 'wall'
+    this.row = 0;                // Row index this lane is built for.
+    this.group = new THREE.Group();
+    this.kids = [];              // Pairs {key, obj} borrowed from pools.
+    this.L = null;               // Hazard lane data from the generator (null for grass).
+    this.dipT = -10;             // Sim time of the last landing on this lane (for the log dip).
+  }
+
+  // Borrow an object from pool key, reset its transform, and attach it.
+  take(key, make) {
+    const o = takeObj(key, make);
+    o.visible = true;
+    o.position.set(0, 0, 0);
+    o.rotation.set(0, 0, 0);
+    o.scale.set(1, 1, 1);
+    this.group.add(o);
+    this.kids.push({ key, obj: o });
+    return o;
+  }
+
+  // Add the ground, edge blocks, and any per-type children from desc.
+  setup(row, desc) {
+    this.row = row;
+    this.group.position.set(0, 0, row);
+    this.L = desc ? desc.lane : null;
+    this.dipT = -10;
+    // Ground strip spanning the full view.
+    const gName = this.groundName(row);
+    const ground = this.take('tile:' + gName, () => {
+      const m = new THREE.Mesh(GEO.tile, groundMat(gName));
+      m.receiveShadow = true;
+      return m;
+    });
+    ground.scale.set(LANE_WIDE, 1, 1);
+    ground.position.set(LANE_CENTRE_X, 0, 0);
+    // Blocked terrain beyond the playable columns, on both sides.
+    const left = this.take('edge', () => {
+      const m = new THREE.Mesh(GEO.edge, MATS.tileEdge);
+      m.receiveShadow = true;
+      return m;
+    });
+    left.scale.set(20, 1, 1);
+    left.position.set(CONFIG.colMin - 0.5 - 10, 0, 0);
+    const right = this.take('edge', () => {
+      const m = new THREE.Mesh(GEO.edge, MATS.tileEdge);
+      m.receiveShadow = true;
+      return m;
+    });
+    right.scale.set(20, 1, 1);
+    right.position.set(CONFIG.colMax + 0.5 + 10, 0, 0);
+    this.buildContent(desc);
+  }
+
+  // Ground material name for this row. Grass alternates two greens.
+  groundName(row) {
+    return 'grassA';
+  }
+
+  // Per-type children. Overridden by subclasses.
+  buildContent(desc) {}
+
+  // Return every borrowed child to its pool and empty the group.
+  teardown() {
+    for (const k of this.kids) {
+      this.group.remove(k.obj);
+      giveObj(k.key, k.obj);
+    }
+    this.kids.length = 0;
+    this.L = null;
+  }
+
+  // Per-frame visual update driven by sim time. Subclasses override.
+  visual(t) {}
+
+  // Subclasses answer these for integer columns. Defaults: safe, solid-free.
+  lethalAt(x, t) { return false; }
+  supportAt(x, t) { return false; }
+  isObstacle(x) { return false; }
+  hasCoinAt(x) { return null; }
+  trainAt(t) { return null; }
+
+  // Called by the player when landing on this lane at sim time t.
+  landed(t) {
+    this.dipT = t;
+  }
+}
+
+/* -----------------------------------------------------------------
+   GrassLane: safe ground with static trees and boulders, and at most
+   one coin. Start meadow and visual wall rows use the same class.
+   ----------------------------------------------------------------- */
+class GrassLane extends Lane {
+  constructor(type) {
+    super(type || 'grass');
+    this.coinMesh = null;
+    this.coinCol = -1;
+    this.obstacleSet = new Set();
+  }
+
+  groundName(row) {
+    return (row & 1) ? 'grassB' : 'grassA';
+  }
+
+  buildContent(desc) {
+    this.obstacleSet.clear();
+    this.coinCol = -1;
+    this.coinMesh = null;
+    if (!desc) {
+      // Visual wall: solid trees across every column behind the start.
+      for (let c = CONFIG.colMin; c <= CONFIG.colMax; c++) this.addTree(c, c + this.row);
+      return;
+    }
+    for (const c of desc.obstacles) {
+      this.obstacleSet.add(c);
+      this.addTree(c, desc.index + c);
+    }
+    // Trees on the edge columns keep the frame looking forested.
+    this.addEdgeTree(CONFIG.colMin - 1, this.row);
+    this.addEdgeTree(CONFIG.colMax + 1, this.row + 1);
+    if (desc.coins.length > 0) {
+      const c = desc.coins[0].col;
+      this.coinCol = c;
+      this.coinMesh = this.take('coin', () => new THREE.Mesh(MODELS.coin.geometry, MATS.coin));
+      this.coinMesh.position.set(c, 0.45, 0);
+      this.coinMesh.castShadow = true;
+    }
+  }
+
+  // One static blocker at column c. Variant and boulder choice are fixed by seed-free hashing.
+  addTree(c, hash) {
+    const h = ((hash * 2654435761) >>> 0) % 7;
+    if (h === 0) {
+      const b = this.take('boulder', () => voxelMesh(MODELS.boulder));
+      b.position.set(c, 0, 0);
+    } else {
+      const v = h % 3;
+      const m = this.take('tree:' + v, () => voxelMesh(MODELS.trees[v]));
+      m.position.set(c, 0, 0);
+      m.rotation.y = (h * 0.7) % TAU;
+    }
+  }
+
+  addEdgeTree(c, hash) {
+    const v = Math.abs(hash) % 3;
+    const m = this.take('tree:' + v, () => voxelMesh(MODELS.trees[v]));
+    m.position.set(c, 0.7, 0);
+    m.scale.set(1.2, 1.2, 1.2);
+  }
+
+  lethalAt(x, t) { return false; }
+  isObstacle(x) { return this.obstacleSet.has(x); }
+
+  hasCoinAt(x) {
+    return (this.coinMesh !== null && this.coinCol === x) ? this.coinMesh : null;
+  }
+
+  visual(t) {
+    if (this.coinMesh !== null) {
+      this.coinMesh.visible = !isCoinCollected(this.row, this.coinCol);
+      this.coinMesh.rotation.y = t * CONFIG.coinSpin;
+      this.coinMesh.position.y = 0.45 + CONFIG.coinBounce * Math.abs(Math.sin(t * 3));
+    }
+  }
+}
+
+/* -----------------------------------------------------------------
+   RoadLane: dark asphalt with dashed edge marks. Vehicles drive at one
+   constant speed in one direction, positioned analytically.
+   ----------------------------------------------------------------- */
+class RoadLane extends Lane {
+  constructor() {
+    super('road');
+    this.vehMeshes = [];   // Mesh per vehicle in the order of L.vehicles.
+  }
+
+  groundName() { return 'road'; }
+
+  buildContent(desc) {
+    this.vehMeshes.length = 0;
+    const dash = this.take('dash', () => voxelMesh(GEO.dashStrip));
+    dash.position.set(0, 0.01, -0.5);
+    dash.castShadow = false;
+    if (!desc) return;
+    for (const v of desc.lane.vehicles) {
+      const m = this.take('veh:' + v.model, () => voxelMesh(modelGeo(v.model)));
+      this.vehMeshes.push(m);
+    }
+  }
+
+  visual(t) {
+    const L = this.L;
+    if (!L) return;
+    for (let i = 0; i < L.vehicles.length; i++) {
+      const v = L.vehicles[i];
+      const a = vehicleLeft(L, v, t);
+      const m = this.vehMeshes[i];
+      m.position.set(a + v.len / 2, 0, 0);
+      m.rotation.y = L.dir > 0 ? 0 : Math.PI;
+    }
+  }
+
+  // Vehicle hit-box is the footprint inset slightly on both sides.
+  lethalAt(x, t) {
+    const L = this.L;
+    if (!L) return false;
+    const ins = CONFIG.vehicleSpanInset;
+    for (const v of L.vehicles) {
+      const a = vehicleLeft(L, v, t);
+      if (a + ins < x + 0.5 && a + v.len - ins > x - 0.5) return true;
+    }
+    return false;
+  }
+}
+
+/* -----------------------------------------------------------------
+   RiverLane: bright water. Either moving logs (one direction, one speed)
+   or stationary lily pads. Any water tile not covered is deadly.
+   ----------------------------------------------------------------- */
+class RiverLane extends Lane {
+  constructor() {
+    super('river');
+    this.logMeshes = [];    // Mesh per log.
+    this.coinMeshes = [];   // Coin mesh per log (null if the log has no coin).
+    this.padMeshes = [];    // Mesh per lily pad.
+    this.waves = [];        // Decorative streaks on the water.
+  }
+
+  groundName() { return 'river'; }
+
+  buildContent(desc) {
+    this.logMeshes.length = 0;
+    this.coinMeshes.length = 0;
+    this.padMeshes.length = 0;
+    this.waves.length = 0;
+    for (let k = 0; k < 3; k++) {
+      this.waves.push(this.take('wave', () => new THREE.Mesh(GEO.wave, MATS.wave)));
+    }
+    if (!desc) return;
+    const L = desc.lane;
+    if (L.kind === 'logs') {
+      for (const log of L.logs) {
+        const m = this.take('log:' + log.len, () => voxelMesh(MODELS.logs[log.len]));
+        this.logMeshes.push(m);
+        if (log.coin) {
+          const c = this.take('coin', () => new THREE.Mesh(MODELS.coin.geometry, MATS.coin));
+          c.position.set(0, 0.5, 0);
+          this.coinMeshes.push(c);
+        } else {
+          this.coinMeshes.push(null);
+        }
+      }
+    } else {
+      for (const c of L.pads) {
+        const p = this.take('pad', () => {
+          const m = new THREE.Mesh(PAD_GEO, MATS.pad);
+          m.receiveShadow = true;
+          return m;
+        });
+        p.position.set(c, 0.04, 0);
+        this.padMeshes.push(p);
+      }
+    }
+  }
+
+  landed(t) {
+    this.dipT = t;
+  }
+
+  visual(t) {
+    const L = this.L;
+    if (!L) return;
+    const dip = Math.max(0, 1 - (t - this.dipT) / 0.35) * 0.07;
+    for (let k = 0; k < this.waves.length; k++) {
+      const w = this.waves[k];
+      w.position.set(((this.row * 0.61 + k * 3.1 + t * 0.5) % 9 + 9) % 9 - 0.5, 0.02, (k - 1) * 0.28);
+    }
+    if (L.kind === 'logs') {
+      for (let i = 0; i < L.logs.length; i++) {
+        const log = L.logs[i];
+        const left = logLeft(L, log, t);
+        const m = this.logMeshes[i];
+        m.position.set(left + (log.len - 1) / 2, -dip, 0);
+        m.rotation.y = 0;
+        const c = this.coinMeshes[i];
+        if (c !== null) {
+          const kx = left + Math.floor((log.len - 1) / 2);
+          c.position.set(kx, 0.5 - dip + CONFIG.coinBounce * Math.abs(Math.sin(t * 3)), 0);
+          c.rotation.y = t * CONFIG.coinSpin;
+          c.visible = !isCoinCollected(this.row, i);
+        }
+      }
+    } else {
+      for (const p of this.padMeshes) p.position.y = 0.04 - dip;
+    }
+  }
+
+  // Water is deadly unless a log or pad covers the column.
+  lethalAt(x, t) {
+    return !this.supportAt(x, t);
+  }
+
+  supportAt(x, t) {
+    const L = this.L;
+    if (!L) return false;
+    if (L.kind === 'pads') {
+      return L.pads.indexOf(x) >= 0;
+    }
+    for (const log of L.logs) {
+      const left = logLeft(L, log, t);
+      if (x >= left - 0.5 && x <= left + log.len - 0.5) return true;
+    }
+    return false;
+  }
+
+  // Coin on a log: returns the log index whose coin is at column x at time t, or -1.
+  coinOnLogAt(x, t) {
+    const L = this.L;
+    if (!L || L.kind !== 'logs') return -1;
+    for (let i = 0; i < L.logs.length; i++) {
+      const log = L.logs[i];
+      if (!log.coin) continue;
+      if (isCoinCollected(this.row, i)) continue;
+      const kx = logLeft(L, log, t) + Math.floor((log.len - 1) / 2);
+      if (Math.abs(kx - x) <= CONFIG.pickupRadius) return i;
+    }
+    return -1;
+  }
+}
+
+/* -----------------------------------------------------------------
+   RailLane: one track with ties, rails, and a signal post at each edge.
+   Trains run on a precomputed schedule (absolute sim times).
+   ----------------------------------------------------------------- */
+class RailLane extends Lane {
+  constructor() {
+    super('rail');
+    this.trainMesh = null;
+    this.signals = [];
+    this.warnIdx = 0;       // Next train index whose warning bell is pending.
+    this.passIdx = 0;       // Next train index whose whoosh is pending.
+  }
+
+  groundName() { return 'gravel'; }
+
+  buildContent(desc) {
+    this.trainMesh = null;
+    this.signals.length = 0;
+    const ties = this.take('tie', () => voxelMesh(GEO.tieStrip));
+    ties.position.set(0, 0.01, 0);
+    ties.castShadow = false;
+    const rails = this.take('rail', () => voxelMesh(GEO.railStrip));
+    rails.position.set(0, 0.02, 0);
+    rails.castShadow = false;
+    for (const x of [CONFIG.colMin - 1, CONFIG.colMax + 1]) {
+      const s = this.take('signal', makeSignalGroup);
+      s.position.set(x, 0, -0.35);
+      this.signals.push(s);
+    }
+    this.trainMesh = this.take('train', () => voxelMesh(MODELS.train));
+    this.trainMesh.visible = false;
+    if (desc) {
+      this.warnIdx = 0;
+      this.passIdx = 0;
+    }
+  }
+
+  // Finds the train that is warning or passing at sim time t, or null.
+  activeTrain(t) {
+    const L = this.L;
+    if (!L || L.trains.length === 0) return null;
+    const i = lastTrainIndex(L.trains, t + CONFIG.trainWarning);
+    if (i < 0) return null;
+    const tr = L.trains[i];
+    if (t > tr.clearAt) return null;
+    return tr;
+  }
+
+  trainAt(t) {
+    const tr = this.activeTrain(t);
+    if (tr === null) return null;
+    return { front: trainFront(this.L, tr, t), len: tr.len, t0: tr.t, clearAt: tr.clearAt };
+  }
+
+  visual(t) {
+    const L = this.L;
+    if (!L) return;
+    const tr = this.activeTrain(t);
+    // Warning lamps flash red while a train is on its way or passing.
+    const warning = tr !== null && t >= tr.t - CONFIG.trainWarning;
+    const flashOn = warning && (Math.floor(t * 6) % 2 === 0);
+    for (const s of this.signals) {
+      s.userData.lampMat.emissive.setHex(flashOn ? 0xff2a3a : 0x000000);
+      s.userData.lampMat.color.setHex(flashOn ? 0xff3344 : 0x4a0d12);
+    }
+    if (tr === null) {
+      this.trainMesh.visible = false;
+      return;
+    }
+    const front = trainFront(L, tr, t);
+    const span = tr.len;
+    const centre = L.dir > 0 ? front - span / 2 : front + span / 2;
+    this.trainMesh.visible = true;
+    this.trainMesh.position.set(centre, 0, 0);
+    this.trainMesh.scale.set(span / ((1 + TRAIN_REF_CARS) * CONFIG.trainTileLength), 1, 1);
+    this.trainMesh.rotation.y = L.dir > 0 ? 0 : Math.PI;
+  }
+
+  // The body of the train covers the tile when the footprint overlaps the inset tile.
+  lethalAt(x, t) {
+    const L = this.L;
+    if (!L) return false;
+    const tr = this.activeTrain(t);
+    if (tr === null) return false;
+    const front = trainFront(L, tr, t);
+    const ins = CONFIG.vehicleSpanInset;
+    let a, b;
+    if (L.dir > 0) {
+      a = front - tr.len;
+      b = front;
+    } else {
+      a = front;
+      b = front + tr.len;
+    }
+    return a + ins < x + 0.5 && b - ins > x - 0.5;
+  }
+}
+
+// Build an empty lane of the given type. Lanes are pooled per type.
+function takeLane(type) {
+  return takeObj('lane:' + type, () => {
+    if (type === 'road') return new RoadLane();
+    if (type === 'river') return new RiverLane();
+    if (type === 'rail') return new RailLane();
+    return new GrassLane(type);
+  });
+}
+
+function giveLane(lane) {
+  giveObj('lane:' + lane.type, lane);
+}
+
+// Collected coins for the current run. Key = row * 100 + column or log slot.
+const RUN_COINS = new Set();
+
+function coinKey(row, slot) {
+  return row * 100 + slot;
+}
+
+function isCoinCollected(row, slot) {
+  return RUN_COINS.has(coinKey(row, slot));
+}
+
+/* =================================================================
+   LANE GENERATOR (chunked, procedural, solvability-guaranteed)
+   Rows are generated in order from row 0 upward using the one seeded
+   PRNG, so the same seed always gives the same world. Rule numbers
+   refer to spec section 2.5.
+   ================================================================= */
+
+// Generator state. descs[row] is the descriptor for each generated row.
+const GEN = {
+  descs: [],              // Row descriptors, index = row number.
+  reach: [],              // Columns reachable in the most recent row (rule R2 bookkeeping).
+  plan: null,             // Current chunk {type, len}.
+  planLeft: 0,            // Rows left in the current chunk.
+  lastKind: 'start',      // Kind of the most recently planned chunk.
+  started: false,         // True after the opening meadow chunk is planned.
+  pendingGrass: 0,        // Length of the grass chunk that follows the opening meadow.
+};
+
+// Reset generator state for a new world. Descriptor memory is released.
+function resetGen() {
+  GEN.descs = [];
+  GEN.reach = [CONFIG.startCol];
+  GEN.plan = null;
+  GEN.planLeft = 0;
+  GEN.lastKind = 'start';
+  GEN.started = false;
+  GEN.pendingGrass = 0;
+}
+
+// Columns 0..8 that are not in the blocked list, in ascending order.
+function freeCols(blocked) {
+  const out = [];
+  for (let c = CONFIG.colMin; c <= CONFIG.colMax; c++) {
+    if (blocked.indexOf(c) < 0) out.push(c);
+  }
+  return out;
+}
+
+// Every column in the free runs that contain a seed column (rule R2 spread).
+function spreadReach(free, seeds) {
+  const out = [];
+  let i = 0;
+  while (i < free.length) {
+    let j = i;
+    while (j + 1 < free.length && free[j + 1] === free[j] + 1) j++;
+    let hit = false;
+    for (let k = i; k <= j; k++) {
+      if (seeds.indexOf(free[k]) >= 0) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) {
+      for (let k = i; k <= j; k++) out.push(free[k]);
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
+// Choose static obstacles for a grass row. Keeps rule R1 and rule R2.
+function placeObstacles(row, d, isStart, reachPrev) {
+  const obst = [];
+  const maxObs = Math.min(CONFIG.obstaclesMax, 1 + Math.floor(d * 4));
+  const want = randInt(0, maxObs);
+  let tries = 0;
+  while (obst.length < want && tries < 24) {
+    tries++;
+    const c = randInt(CONFIG.colMin, CONFIG.colMax);
+    if (obst.indexOf(c) >= 0) continue;
+    if (isStart && c >= CONFIG.startClearMin && c <= CONFIG.startClearMax) continue;
+    const trial = obst.concat([c]);
+    const free = freeCols(trial);
+    if (free.length < CONFIG.freeColumnsMin) continue;
+    // At least one free column must still touch a reachable column below.
+    let touch = false;
+    for (const f of free) {
+      if (reachPrev.indexOf(f) >= 0) {
+        touch = true;
+        break;
+      }
+    }
+    if (!touch) continue;
+    obst.push(c);
+  }
+  obst.sort((a, b) => a - b);
+  return obst;
+}
+
+// Road lane: vehicles on one fixed ring, one direction and one speed.
+function makeRoadLane(row, d) {
+  const dir = rand() < 0.5 ? 1 : -1;
+  const hi = Math.min(CONFIG.roadSpeedMax, CONFIG.roadSpeedStart + row * CONFIG.roadSpeedPerRow + 0.6);
+  const speed = randRange(CONFIG.roadSpeedMin, Math.max(CONFIG.roadSpeedMin, hi));
+  const r = rand();
+  const kind = r < CONFIG.truckLaneChance ? 'truck' : (r < CONFIG.truckLaneChance + CONFIG.mixedLaneChance ? 'mixed' : 'car');
+  const end = WRAP_BASE + WRAP_PERIOD;
+  const vehicles = [];
+  let pos = WRAP_BASE + randRange(0, 3);
+  let gapsMin = Infinity;
+  while (pos < end - 2) {
+    let model, len;
+    const longVehicle = kind === 'truck' || (kind === 'mixed' && rand() < 0.4);
+    if (longVehicle) {
+      if (rand() < 0.5) { model = 'trucks:box'; len = 2; } else { model = 'trucks:semi'; len = 3; }
+    } else {
+      model = 'cars:' + pick(['compact', 'sedan', 'taxi', 'police']);
+      len = 1;
+    }
+    vehicles.push({ a0: pos, len, model });
+    const gap = randRange(CONFIG.carGapMin, CONFIG.carGapMax);
+    pos += len + gap;
+  }
+  // Close the ring: the gap from the last vehicle to the first must also be legal.
+  while (vehicles.length > 1) {
+    const last = vehicles[vehicles.length - 1];
+    const first = vehicles[0];
+    const wrapGap = (first.a0 + WRAP_PERIOD) - (last.a0 + last.len);
+    if (wrapGap >= CONFIG.carGapMin) break;
+    vehicles.pop();
+  }
+  for (let i = 0; i + 1 < vehicles.length; i++) {
+    const g = vehicles[i + 1].a0 - (vehicles[i].a0 + vehicles[i].len);
+    if (g < gapsMin) gapsMin = g;
+  }
+  if (vehicles.length > 1) {
+    const last = vehicles[vehicles.length - 1];
+    const wrapGap = (vehicles[0].a0 + WRAP_PERIOD) - (last.a0 + last.len);
+    if (wrapGap < gapsMin) gapsMin = wrapGap;
+  } else {
+    gapsMin = WRAP_PERIOD - (vehicles[0] ? vehicles[0].len : 0);
+  }
+  return { kind: 'road', dir, speed, vehicles, gapsMin };
+}
+
+// Rail track: a fixed train schedule in absolute sim time (rules R4).
+function makeRailLane(row, d) {
+  const dir = rand() < 0.5 ? 1 : -1;
+  const hi = CONFIG.trainSpeedMin + d * (CONFIG.trainSpeedMax - CONFIG.trainSpeedMin);
+  const speed = randRange(CONFIG.trainSpeedMin, Math.max(CONFIG.trainSpeedMin + 0.1, hi));
+  const span = (CONFIG.colMax + 1) + 2 * CONFIG.trainEntryMargin;   // columns from entry to clear
+  const gapCeil = lerp(CONFIG.trainGapMax, CONFIG.trainGapMaxFloor, d);
+  const trains = [];
+  let t = randRange(2.5, 4.5);
+  let prevClear = -Infinity;
+  while (t < CONFIG.trainHorizon) {
+    const cars = randInt(CONFIG.trainCarsMin, CONFIG.trainCarsMax);
+    const len = (1 + cars) * CONFIG.trainTileLength;
+    const sp = randRange(CONFIG.trainSpeedMin, Math.max(CONFIG.trainSpeedMin + 0.1, hi));
+    const clearAt = t + (span + len) / sp;
+    trains.push({ t, len, speed: sp, clearAt });
+    prevClear = clearAt;
+    const gap = randRange(CONFIG.trainGapMin, gapCeil);
+    // Next train: at least the minimum gap, and its warning starts after this train has cleared.
+    t = Math.max(t + gap, prevClear + CONFIG.trainWarning + 0.25);
+  }
+  return { kind: 'rail', dir, speed, trains };
+}
+
+// River lane with logs: a ring of logs whose water gaps are 1 or 2 tiles (rule R5).
+function makeLogRing() {
+  const P = WRAP_PERIOD;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const pieces = [];
+    let sum = 0;
+    let ok = true;
+    while (sum < P) {
+      const remaining = P - sum;
+      const cand = [];
+      for (const len of CONFIG.logLengths) {
+        for (let gap = CONFIG.logGapMin; gap <= CONFIG.logGapMax; gap++) {
+          const left = remaining - len - gap;
+          if (left === 0 || left >= 3) cand.push({ len, gap });
+        }
+      }
+      if (cand.length === 0) {
+        ok = false;
+        break;
+      }
+      const choice = pick(cand);
+      pieces.push(choice);
+      sum += choice.len + choice.gap;
+    }
+    if (ok) return pieces;
+  }
+  // Fixed fallback that sums to the period exactly with legal gaps.
+  return [
+    { len: 3, gap: 1 }, { len: 4, gap: 2 }, { len: 3, gap: 1 },
+    { len: 4, gap: 2 }, { len: 3, gap: 1 }, { len: 4, gap: 2 }, { len: 2, gap: 1 },
+  ];
+}
+
+function makeLogLane(row, d) {
+  const dir = rand() < 0.5 ? 1 : -1;
+  const hi = Math.min(CONFIG.logSpeedMax, CONFIG.logSpeedStart + row * CONFIG.logSpeedPerRow + 0.4);
+  const speed = randRange(CONFIG.logSpeedMin, Math.max(CONFIG.logSpeedMin + 0.05, hi));
+  const pieces = makeLogRing();
+  const logs = [];
+  let off = WRAP_BASE;
+  for (const p of pieces) {
+    logs.push({ off, len: p.len, coin: rand() < CONFIG.coinChanceLog });
+    off += p.len + p.gap;
+  }
+  return { kind: 'logs', dir, speed, logs };
+}
+
+// River lane with lily pads: stationary, never more than 2 water tiles in a row (rule R6).
+function makePadLane() {
+  const pads = [];
+  let run = 0;
+  for (let c = CONFIG.colMin; c <= CONFIG.colMax; c++) {
+    if (run >= 2 || rand() < 0.5) {
+      pads.push(c);
+      run = 0;
+    } else {
+      run++;
+    }
+  }
+  if (pads.length === 0) pads.push(4);
+  return { kind: 'pads', dir: 1, speed: 0, pads };
+}
+
+// Build one row of the given hazard or grass type. Appends to GEN.descs.
+function genRow(row, type) {
+  const d = clamp(row / CONFIG.difficultyRows, 0, 1);
+  const desc = { index: row, type, obstacles: [], coins: [], lane: null };
+  if (type === 'start' || type === 'grass') {
+    const reachPrev = GEN.reach;
+    const obst = placeObstacles(row, d, type === 'start', reachPrev);
+    const free = freeCols(obst);
+    const seeds = [];
+    for (const f of free) if (reachPrev.indexOf(f) >= 0) seeds.push(f);
+    GEN.reach = spreadReach(free, seeds);
+    desc.obstacles = obst;
+    if (type === 'grass' && rand() < CONFIG.coinChanceGrass) {
+      desc.coins.push({ col: pick(free) });
+    }
+  } else {
+    // Hazard rows are passable for reachability, so every column counts as reachable.
+    GEN.reach = [];
+    for (let c = CONFIG.colMin; c <= CONFIG.colMax; c++) GEN.reach.push(c);
+    if (type === 'road') desc.lane = makeRoadLane(row, d);
+    else if (type === 'rail') desc.lane = makeRailLane(row, d);
+    else if (rand() < CONFIG.padChance) desc.lane = makePadLane();
+    else desc.lane = makeLogLane(row, d);
+  }
+  GEN.descs.push(desc);
+}
+
+// Pick the next chunk. Hazard chunks are always followed by a grass chunk (rule R7).
+function nextChunk() {
+  const d = clamp(GEN.descs.length / CONFIG.difficultyRows, 0, 1);
+  if (!GEN.started) {
+    GEN.started = true;
+    GEN.lastKind = 'grass';
+    return { type: 'start', len: CONFIG.startRows };
+  }
+  if (GEN.lastKind === 'start' || GEN.lastKind === 'grass') {
+    // Hazard chunk. Weighted choice: road, river, rail.
+    const r = rand();
+    const type = r < 0.4 ? 'road' : (r < 0.75 ? 'river' : 'rail');
+    let lo, hi;
+    if (type === 'road') { lo = CONFIG.roadChunkMin; hi = CONFIG.roadChunkMax; }
+    else if (type === 'river') { lo = CONFIG.riverChunkMin; hi = CONFIG.riverChunkMax; }
+    else { lo = CONFIG.railChunkMin; hi = CONFIG.railChunkMax; }
+    const cap = Math.round(lerp(lo + 1, hi, d));
+    GEN.lastKind = type;
+    return { type, len: randInt(lo, Math.max(lo, cap)) };
+  }
+  GEN.lastKind = 'grass';
+  return { type: 'grass', len: randInt(CONFIG.grassChunkMin, CONFIG.grassChunkMax) };
+}
+
+// Make sure descriptors exist up to and including row hi.
+function ensureRows(hi) {
+  while (GEN.descs.length <= hi) {
+    if (GEN.planLeft <= 0) {
+      GEN.plan = nextChunk();
+      GEN.planLeft = GEN.plan.len;
+      // The opening meadow is followed by one grass chunk, so the start feels safe.
+      if (GEN.plan.type === 'start' && GEN.started && GEN.descs.length === 0) {
+        GEN.pendingGrass = randInt(2, 3);
+      }
+    }
+    genRow(GEN.descs.length, GEN.plan.type);
+    GEN.planLeft--;
+    if (GEN.planLeft === 0 && GEN.plan.type === 'start') {
+      GEN.plan = { type: 'grass', len: GEN.pendingGrass || 2 };
+      GEN.planLeft = GEN.plan.len;
+      GEN.lastKind = 'grass';
+      GEN.pendingGrass = 0;
+    }
+  }
+}
+
+// Descriptor for a generated row (row >= 0). Generates on demand.
+function rowDesc(row) {
+  ensureRows(row);
+  return GEN.descs[row];
+}
+
+/* =================================================================
+   TILE RULES AND HAZARD PROBES
+   Static blocking uses generator data. Moving hazards are answered by
+   stateless probe lanes that read the descriptor for any row.
+   ================================================================= */
+
+// Direction name to (row delta, column delta).
+const DIRS = {
+  up: [1, 0],
+  down: [-1, 0],
+  left: [0, -1],
+  right: [0, 1],
+};
+
+// Facing angle (radians around y) for each direction. Chicken faces +z at 0.
+const FACE_ANGLE = { up: 0, down: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 };
+
+// Static block: tree wall behind the start, world edges, and obstacles.
+function isBlocked(row, col) {
+  if (row < 0) return true;
+  if (col < CONFIG.colMin || col > CONFIG.colMax) return true;
+  const d = rowDesc(row);
+  return d.obstacles.indexOf(col) >= 0;
+}
+
+// One probe lane per hazard type, reused for every query (never added to the scene).
+const PROBE = {
+  road: new RoadLane(),
+  river: new RiverLane(),
+  rail: new RailLane(),
+};
+
+// Return the probe for a row's hazard type with its lane data set, or null for grass.
+function queryLane(desc) {
+  if (desc.type === 'road') {
+    PROBE.road.L = desc.lane;
+    PROBE.road.row = desc.index;
+    return PROBE.road;
+  }
+  if (desc.type === 'river') {
+    PROBE.river.L = desc.lane;
+    PROBE.river.row = desc.index;
+    return PROBE.river;
+  }
+  if (desc.type === 'rail') {
+    PROBE.rail.L = desc.lane;
+    PROBE.rail.row = desc.index;
+    return PROBE.rail;
+  }
+  return null;
+}
+
+// Index of the log that carries column x at time t, -1 if none, -2 for a lily pad.
+function supportIndex(desc, x, t) {
+  const lane = desc.lane;
+  if (!lane || desc.type !== 'river') return -1;
+  if (lane.kind === 'pads') return lane.pads.indexOf(x) >= 0 ? -2 : -1;
+  for (let i = 0; i < lane.logs.length; i++) {
+    const log = lane.logs[i];
+    const left = logLeft(lane, log, t);
+    if (x >= left - 0.5 && x <= left + log.len - 0.5) return i;
+  }
+  return -1;
+}
+
+/* =================================================================
+   PLAYER
+   One tile of movement per input. Hops last CONFIG.hopDuration. One
+   input may be queued during a hop and runs on landing. Blocked moves
+   bump in place. Riding a log makes x continuous.
+   ================================================================= */
+const PLAYER = {
+  row: 0,              // Row the player is standing on (changes at landing).
+  x: CONFIG.startCol,  // Column, or continuous column while riding.
+  riding: false,       // True while on a log or lily pad.
+  rideIdx: -1,         // Index of the log in the lane, or -2 for a pad.
+  riderOff: 0,         // Offset of the player from the log's left edge.
+  queued: null,        // The one buffered direction name, or null.
+  hop: { on: false, fromRow: 0, fromX: 0, toRow: 0, toX: 0, t0: 0, dur: CONFIG.hopDuration, dir: 'up' },
+  faceDir: 'up',       // Direction the chicken faces.
+  bumpT: -10,          // Sim time of the last blocked move.
+  landT: -10,          // Sim time of the last landing.
+  mesh: null,          // The chicken mesh, set in init.
+};
+
+// Put the player back on the start tile.
+function playerReset() {
+  const P = PLAYER;
+  P.row = 0;
+  P.x = CONFIG.startCol;
+  P.riding = false;
+  P.rideIdx = -1;
+  P.riderOff = 0;
+  P.queued = null;
+  P.hop.on = false;
+  P.faceDir = 'up';
+  P.bumpT = -10;
+  P.landT = -10;
+}
+
+// Start a hop in direction dirName, or bump if the target is blocked.
+function tryMove(dirName) {
+  const P = PLAYER;
+  const d = DIRS[dirName];
+  const baseCol = P.riding ? Math.round(P.x) : P.x;
+  const tr = P.row + d[0];
+  const tc = baseCol + d[1];
+  P.faceDir = dirName;
+  if (isBlocked(tr, tc)) {
+    P.bumpT = G.simTime;
+    AUDIO.play('bump');
+    return;
+  }
+  P.hop.on = true;
+  P.hop.fromRow = P.row;
+  P.hop.fromX = P.x;
+  P.hop.toRow = tr;
+  P.hop.toX = tc;
+  P.hop.t0 = G.simTime;
+  P.hop.dur = CONFIG.hopDuration;
+  P.hop.dir = dirName;
+  P.riding = false;
+  AUDIO.play('hop');
+}
+
+// Input entry point. Queues one move while hopping, otherwise moves at once.
+function playerInput(dirName) {
+  const P = PLAYER;
+  if (P.hop.on) {
+    if (P.queued === null) P.queued = dirName;   // A second press during a hop is dropped.
+    return;
+  }
+  tryMove(dirName);
+}
+
+// Resolve a finished hop at sim time t. Handles water, vehicles, trains, and coins.
+function landHop(t) {
+  const P = PLAYER;
+  const h = P.hop;
+  P.hop.on = false;
+  const desc = rowDesc(h.toRow);
+  P.row = h.toRow;
+  P.landT = t;
+  if (desc.type === 'river') {
+    const lane = queryLane(desc);
+    let found = null;
+    if (lane.supportAt(h.toX, t)) {
+      found = h.toX;
+    } else {
+      // Snap to the nearest tile that a log or pad covers at this moment.
+      for (let k = 1; k <= 2 && found === null; k++) {
+        if (h.toX - k >= CONFIG.colMin && lane.supportAt(h.toX - k, t)) found = h.toX - k;
+        else if (h.toX + k <= CONFIG.colMax && lane.supportAt(h.toX + k, t)) found = h.toX + k;
+      }
+    }
+    if (found === null) {
+      killPlayer('drown');
+      return;
+    }
+    const idx = supportIndex(desc, found, t);
+    P.riding = true;
+    P.rideIdx = idx;
+    P.x = found;
+    if (idx >= 0) P.riderOff = found - logLeft(desc.lane, desc.lane.logs[idx], t);
+    else P.riderOff = 0;
+    const windowLane = LANES.get(P.row);
+    if (windowLane) windowLane.landed(t);   // Start the log dip on the lane that is drawn.
+    AUDIO.play('splash');
+    FX.ripple(P.row, found, t);
+  } else {
+    P.riding = false;
+    P.rideIdx = -1;
+    P.x = h.toX;
+    if (desc.type === 'road' && queryLane(desc).lethalAt(P.x, t)) {
+      killPlayer('squash');
+      return;
+    }
+    if (desc.type === 'rail' && queryLane(desc).lethalAt(P.x, t)) {
+      killPlayer('train');
+      return;
+    }
+    FX.dust(P.row, P.x, t);
+  }
+  collectHere(t);
+  if (P.row > G.maxRow) {
+    G.maxRow = P.row;
+    G.score = P.row;
+    G.idleTime = 0;
+  }
+  // Start the buffered move now, on the same landing frame.
+  if (G.mode === 'playing' && P.queued !== null) {
+    const q = P.queued;
+    P.queued = null;
+    tryMove(q);
+  }
+}
+
+// Collect a coin the player is standing on (grass coin, or log coin while riding).
+function collectHere(t) {
+  const P = PLAYER;
+  const desc = rowDesc(P.row);
+  if (desc.type === 'grass' || desc.type === 'start') {
+    for (const c of desc.coins) {
+      if (c.col === Math.round(P.x) && !isCoinCollected(P.row, c.col)) collectCoin(P.row, c.col);
+    }
+  } else if (desc.type === 'river' && P.riding && P.rideIdx >= 0) {
+    const log = desc.lane.logs[P.rideIdx];
+    if (log.coin && !isCoinCollected(P.row, P.rideIdx)) {
+      const kx = logLeft(desc.lane, log, t) + Math.floor((log.len - 1) / 2);
+      if (Math.abs(kx - P.x) <= CONFIG.pickupRadius) collectCoin(P.row, P.rideIdx);
+    }
+  }
+}
+
+// Advance the player for one sim step. Called from simStep after the clock moves.
+function playerStep(t) {
+  const P = PLAYER;
+  if (P.hop.on) {
+    if (t >= P.hop.t0 + P.hop.dur - 1e-9) landHop(t);
+    return;
+  }
+  if (P.riding) {
+    const desc = rowDesc(P.row);
+    if (P.rideIdx >= 0) {
+      P.x = logLeft(desc.lane, desc.lane.logs[P.rideIdx], t) + P.riderOff;
+      if (P.x < CONFIG.colMin - CONFIG.logRiderInset || P.x > CONFIG.colMax + CONFIG.logRiderInset) {
+        killPlayer('swept');
+        return;
+      }
+      collectHere(t);
+    }
+    return;
+  }
+  // Standing on solid ground: vehicles and trains catch the player here too.
+  const desc = rowDesc(P.row);
+  if (desc.type === 'road' && queryLane(desc).lethalAt(P.x, t)) {
+    killPlayer('squash');
+  } else if (desc.type === 'rail' && queryLane(desc).lethalAt(P.x, t)) {
+    killPlayer('train');
+  }
+}
+
+// Visual pose of the chicken for render time t. Writes position, scale and rotation.
+function playerVisual(t) {
+  const P = PLAYER;
+  const m = P.mesh;
+  let x = P.x, z = P.row, y = 0;
+  let sx = 1, sy = 1, sz = 1;
+  if (P.hop.on) {
+    const a = clamp((t - P.hop.t0) / P.hop.dur, 0, 1);
+    x = lerp(P.hop.fromX, P.hop.toX, a);
+    z = lerp(P.hop.fromRow, P.hop.toRow, a);
+    y = CONFIG.hopHeight * 4 * a * (1 - a);
+    if (a < 0.25) {
+      // Anticipation squash before lift-off.
+      const s = a / 0.25;
+      sy = lerp(1, 0.75, s);
+      sx = lerp(1, 1.15, s);
+      sz = sx;
+    } else {
+      // Stretch in the air.
+      const k = Math.sin(Math.PI * clamp((a - 0.25) / 0.75, 0, 1));
+      sy = 1 + 0.18 * k;
+      sx = 1 - 0.07 * k;
+      sz = sx;
+    }
+  } else {
+    if (P.riding) {
+      y = CONFIG.ridingBobAmp * Math.sin(t * 4) - 0.02;
+    }
+    const since = t - P.landT;
+    if (since < CONFIG.landSeconds) {
+      // Settle after landing.
+      const u = since / CONFIG.landSeconds;
+      sy = lerp(0.82, 1, u);
+      sx = lerp(1.1, 1, u);
+      sz = sx;
+    }
+    const bump = t - P.bumpT;
+    if (bump < CONFIG.bumpSeconds) {
+      // Blocked move: press in place, then recover.
+      const k = Math.sin(Math.PI * bump / CONFIG.bumpSeconds);
+      sy = 1 - 0.22 * k;
+      sx = 1 + 0.14 * k;
+      sz = sx;
+    }
+  }
+  m.position.set(x, y, z);
+  m.scale.set(sx, sy, sz);
+  m.rotation.y = FACE_ANGLE[P.faceDir];
+  m.visible = true;
+}
+
+/* =================================================================
+   CAMERA CONTROLLER
+   Orthographic, fixed angle, roughly isometric. Follows the player
+   forward, never pans back, and auto-advances slowly over time.
+   ================================================================= */
+const CAM = {
+  camera: null,        // THREE.OrthographicCamera, set in init.
+  x: CONFIG.startCol,  // Look-at x.
+  z: 0,                // Look-at z (forward). Only ever increases.
+  halfH: CONFIG.cameraHalfHeight,  // Half height in world units.
+  halfW: CONFIG.cameraHalfWidth,   // Half width in world units.
+  sinE: 0.67,          // Sine of the camera elevation, used for z extents.
+  extZ: 7.5,           // Visible half extent along z in rows.
+};
+
+// Sine of the camera elevation from the fixed offset (side, rise, pull-back).
+(function computeElevation() {
+  const side = CONFIG.cameraSideRun, rise = CONFIG.cameraPitchRise, back = CONFIG.cameraPitchRun;
+  CAM.sinE = rise / Math.sqrt(side * side + rise * rise + back * back);
+})();
+
+// Place the camera at the start of a run.
+function cameraReset() {
+  CAM.x = CONFIG.startCol;
+  CAM.z = PLAYER.row + CONFIG.cameraLead;
+}
+
+// Advance the camera for one step of dt seconds. Never moves backward.
+function cameraStep(dt) {
+  const auto = Math.min(CONFIG.cameraAutoMax, CONFIG.cameraAutoBase + G.score * CONFIG.cameraAutoPerRow);
+  CAM.z += auto * dt;
+  const want = PLAYER.row + CONFIG.cameraLead;
+  if (want > CAM.z) {
+    CAM.z += (want - CAM.z) * Math.min(1, CONFIG.cameraFollowRate * dt);
+  }
+  const wantX = CONFIG.startCol + (PLAYER.x - CONFIG.startCol) * CONFIG.cameraXFollow;
+  CAM.x = lerp(CAM.x, wantX, Math.min(1, 4 * dt));
+}
+
+// Row coordinate of the bottom edge of the screen.
+function cameraBottomZ() {
+  return CAM.z - CAM.extZ;
+}
+
+// Fit the orthographic frustum to the canvas size. Keeps all nine columns visible.
+function cameraFit(w, h) {
+  const aspect = w / Math.max(1, h);
+  CAM.halfH = Math.max(CONFIG.cameraHalfHeight, CONFIG.cameraHalfWidth / aspect);
+  CAM.halfW = CAM.halfH * aspect;
+  CAM.extZ = CAM.halfH / CAM.sinE;
+  const c = CAM.camera;
+  c.left = -CAM.halfW;
+  c.right = CAM.halfW;
+  c.top = CAM.halfH;
+  c.bottom = -CAM.halfH;
+  c.near = 0.1;
+  c.far = 300;
+  c.updateProjectionMatrix();
+}
+
+// Put the camera rig at its current target. Called once per rendered frame.
+function cameraApply() {
+  const c = CAM.camera;
+  c.position.set(CAM.x + CONFIG.cameraSideRun, CONFIG.cameraPitchRise, CAM.z - CONFIG.cameraPitchRun);
+  c.lookAt(CAM.x, 0, CAM.z);
+}
+
+/* =================================================================
+   COLLISION AND DEATH SYSTEM
+   One death starts the state 'dying'. Each death type has its own
+   start function and its own update function that drives the visuals.
+   When the death time has elapsed the run moves to 'gameover'.
+   ================================================================= */
+
+// Death data captured at the moment of death.
+const DEATH = {
+  x: 4,            // Column where the player died.
+  row: 0,          // Row where the player died.
+  dir: 1,          // Lane direction for knock-back or drift deaths.
+  eagle: null,     // The eagle group, set in init.
+};
+
+// Length of the death animation for a death type, in seconds.
+function deathDuration(type) {
+  if (type === 'squash') return CONFIG.squashDuration;
+  if (type === 'drown') return CONFIG.drownDuration;
+  if (type === 'swept') return CONFIG.sweptDuration;
+  if (type === 'train') return CONFIG.trainDuration;
+  return CONFIG.eagleDuration;
+}
+
+// Start a death. Ignored unless the player is alive and playing.
+function killPlayer(type) {
+  if (G.mode !== 'playing') return;
+  const P = PLAYER;
+  const hopping = P.hop.on;
+  DEATH.x = hopping ? lerp(P.hop.fromX, P.hop.toX, clamp((G.simTime - P.hop.t0) / P.hop.dur, 0, 1)) : P.x;
+  DEATH.row = hopping ? P.hop.toRow : P.row;
+  P.hop.on = false;
+  P.queued = null;
+  P.riding = false;
+  const desc = rowDesc(DEATH.row);
+  DEATH.dir = desc.lane && desc.lane.dir ? desc.lane.dir : 1;
+  G.mode = 'dying';
+  G.deathType = type;
+  G.deathT0 = G.simTime;
+  if (type === 'squash') {
+    deathSquashStart();
+    AUDIO.play('squash');
+  } else if (type === 'drown') {
+    deathDrownStart();
+    AUDIO.play('splash');
+  } else if (type === 'swept') {
+    deathSweptStart();
+    AUDIO.play('splash');
+  } else if (type === 'train') {
+    deathTrainStart();
+    AUDIO.play('whoosh');
+  } else {
+    deathEagleStart();
+    AUDIO.play('screech');
+  }
+}
+
+// Advance the death clock. Called from the sim step.
+function deathStep(t) {
+  if (G.mode !== 'dying') return;
+  if (t - G.deathT0 >= deathDuration(G.deathType)) {
+    G.mode = 'gameover';
+    finishRun();
+  }
+}
+
+// --- Squash: the chicken is flattened into a thin pancake. -----------
+function deathSquashStart() {
+  FX.dust(DEATH.row, DEATH.x, G.simTime);
+}
+
+function deathSquashUpdate(p) {
+  const m = PLAYER.mesh;
+  const k = easeOutCubic(clamp(p * 3, 0, 1));
+  m.position.set(DEATH.x, 0, DEATH.row);
+  m.scale.set(lerp(1, 1.6, k), lerp(1, 0.1, k), lerp(1, 1.6, k));
+  m.rotation.y = FACE_ANGLE[PLAYER.faceDir];
+  m.visible = true;
+}
+
+// --- Drown: the chicken sinks with a splash burst. -------------------
+function deathDrownStart() {
+  FX.splash(DEATH.row, DEATH.x, G.simTime);
+}
+
+function deathDrownUpdate(p) {
+  const m = PLAYER.mesh;
+  const k = easeInQuad(clamp(p, 0, 1));
+  m.position.set(DEATH.x, lerp(0, -1.1, k), DEATH.row);
+  m.scale.set(lerp(1, 0.6, k), lerp(1, 0.6, k), lerp(1, 0.6, k));
+  m.rotation.y = FACE_ANGLE[PLAYER.faceDir] + p * 2.5;
+  m.visible = p < 0.9;
+}
+
+// --- Swept: carried off the playable edge and falls away. -------------
+function deathSweptStart() {
+  // Nothing to set up; the drift and fall happen in the update.
+}
+
+function deathSweptUpdate(p) {
+  const m = PLAYER.mesh;
+  const driftX = DEATH.x + (DEATH.x < CONFIG.colMin + CONFIG.colMax / 2 ? -1 : 1) * 2.4 * p;
+  m.position.set(driftX, -p * p * 5, DEATH.row);
+  m.rotation.set(0, FACE_ANGLE[PLAYER.faceDir], p * 6);
+  m.scale.set(1, 1, 1);
+  m.visible = true;
+}
+
+// --- Train: the chicken is knocked along the track and tumbles. -------
+function deathTrainStart() {
+  FX.dust(DEATH.row, DEATH.x, G.simTime);
+}
+
+function deathTrainUpdate(p) {
+  const m = PLAYER.mesh;
+  const arc = Math.sin(Math.PI * clamp(p, 0, 1));
+  m.position.set(DEATH.x + DEATH.dir * 4.2 * p, 0.9 * arc, DEATH.row);
+  m.rotation.set(p * 9, FACE_ANGLE[PLAYER.faceDir], 0);
+  m.scale.set(1, 1, 1);
+  m.visible = p < 0.95;
+}
+
+// --- Eagle: a voxel bird swoops in from the top, grabs, and flies off. -
+function deathEagleStart() {
+  DEATH.eagle.visible = true;
+}
+
+function deathEagleUpdate(p) {
+  const e = DEATH.eagle;
+  const m = PLAYER.mesh;
+  const zTop = CAM.z + CAM.extZ + 2.5;   // Above the top of the screen.
+  const sx = DEATH.x, sz = DEATH.row;
+  const grabY = 1.8;
+  const swoopA = 0.45;
+  let ex, ey, ez, ry;
+  if (p < swoopA) {
+    const k = easeOutCubic(p / swoopA);
+    ex = sx;
+    ey = lerp(5.5, grabY, k);
+    ez = lerp(zTop, sz, k);
+    ry = Math.PI;                           // Head points down the screen while diving.
+  } else {
+    const q = clamp((p - swoopA) / (1 - swoopA), 0, 1);
+    const k = q * q;
+    ex = sx;
+    ey = lerp(grabY, 7.5, k);
+    ez = lerp(sz, zTop + 6, k);
+    ry = 0;                                 // Head points up the screen while leaving.
+  }
+  e.position.set(ex, ey, ez);
+  e.rotation.y = ry;
+  const flap = Math.sin(G.simTime * 24) * 0.55;
+  e.userData.wingL.rotation.z = flap;
+  e.userData.wingR.rotation.z = -flap;
+  // The chicken hangs below the talons.
+  m.position.set(ex, ey - 0.95, ez);
+  m.scale.set(0.9, 0.9, 0.9);
+  m.rotation.set(0, 0, Math.sin(p * 12) * 0.2);
+  m.visible = true;
+}
+
+// Per-frame visuals for the current death. Holds the last pose at game over.
+function deathVisual(t) {
+  const dur = deathDuration(G.deathType);
+  const p = clamp((t - G.deathT0) / dur, 0, 1);
+  const type = G.deathType;
+  if (type === 'squash') deathSquashUpdate(p);
+  else if (type === 'drown') deathDrownUpdate(p);
+  else if (type === 'swept') deathSweptUpdate(p);
+  else if (type === 'train') deathTrainUpdate(p);
+  else deathEagleUpdate(p);
+  if (type !== 'eagle') DEATH.eagle.visible = false;
+}
+
+// Small easing helpers used by the death animations. No allocation.
+function easeOutCubic(x) {
+  const u = 1 - x;
+  return 1 - u * u * u;
+}
+
+function easeInQuad(x) {
+  return x * x;
+}
+
+/* =================================================================
+   AUDIO MANAGER
+   All sounds are synthesized with Web Audio. The context is created
+   or resumed only from a user gesture. Voices are capped.
+   ================================================================= */
+const AUDIO = {
+  ctx: null,        // AudioContext, null until the first gesture.
+  master: null,     // Master gain node.
+  noise: null,      // Shared one-second white-noise buffer.
+  voices: 0,        // Active voices.
+  muted: false,     // Mirrors G.muted.
+};
+
+// Create or resume the audio context. Safe to call on every gesture.
+function audioUnlock() {
+  try {
+    if (!AUDIO.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const master = ctx.createGain();
+      master.gain.value = AUDIO.muted ? 0 : CONFIG.masterGain;
+      master.connect(ctx.destination);
+      // Noise from a small local LCG so game randomness is never touched.
+      const len = ctx.sampleRate;
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      let s = 12345;
+      for (let i = 0; i < len; i++) {
+        s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+        data[i] = s / 2147483648 - 1;
+      }
+      AUDIO.ctx = ctx;
+      AUDIO.master = master;
+      AUDIO.noise = buf;
+    }
+    if (AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume();
+  } catch (e) {
+    /* audio unavailable: the game runs silently */
+  }
+}
+
+// Mute or unmute the master output.
+function audioSetMuted(flag) {
+  AUDIO.muted = flag;
+  if (AUDIO.master) AUDIO.master.gain.value = flag ? 0 : CONFIG.masterGain;
+}
+
+// Begin one voice and register its end so the cap works.
+function voiceStart(node, endAt) {
+  AUDIO.voices++;
+  node.onended = () => { AUDIO.voices = Math.max(0, AUDIO.voices - 1); };
+  node.stop(endAt);
+}
+
+// One oscillator with a simple attack and decay envelope.
+function tone(freq, freqEnd, dur, type, vol, delay) {
+  const ctx = AUDIO.ctx;
+  const t0 = ctx.currentTime + (delay || 0);
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  if (freqEnd && freqEnd !== freq) o.frequency.exponentialRampToValueAtTime(freqEnd, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g);
+  g.connect(AUDIO.master);
+  o.start(t0);
+  voiceStart(o, t0 + dur + 0.02);
+}
+
+// Filtered noise burst, used for whooshes, splashes, rumbles and clicks.
+function noiseBurst(dur, filterType, f0, f1, vol, delay) {
+  const ctx = AUDIO.ctx;
+  const t0 = ctx.currentTime + (delay || 0);
+  const src = ctx.createBufferSource();
+  src.buffer = AUDIO.noise;
+  const filt = ctx.createBiquadFilter();
+  filt.type = filterType;
+  filt.frequency.setValueAtTime(f0, t0);
+  if (f1 && f1 !== f0) filt.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + Math.min(0.03, dur * 0.3));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(filt);
+  filt.connect(g);
+  g.connect(AUDIO.master);
+  src.start(t0, 0, dur);
+  voiceStart(src, t0 + dur + 0.02);
+}
+
+// Named sound effects. Each call is short and returns at once.
+const SFX = {
+  hop() { tone(560, 300, 0.07, 'sine', 0.16); },
+  bump() { tone(190, 90, 0.11, 'square', 0.08); },
+  coin() {
+    tone(988, 988, 0.11, 'sine', 0.2);
+    tone(1319, 1319, 0.16, 'sine', 0.18, 0.07);
+  },
+  horn() {
+    tone(370, 360, 0.36, 'sawtooth', 0.05);
+    tone(466, 452, 0.36, 'sawtooth', 0.04);
+  },
+  rumble() {
+    noiseBurst(0.6, 'lowpass', 160, 90, 0.2);
+    tone(58, 50, 0.6, 'sine', 0.12);
+  },
+  bell() {
+    tone(1320, 1320, 0.5, 'sine', 0.2);
+    tone(1760, 1760, 0.4, 'sine', 0.08);
+    tone(1320, 1320, 0.5, 'sine', 0.2, 0.42);
+    tone(1760, 1760, 0.4, 'sine', 0.08, 0.42);
+  },
+  whoosh() {
+    noiseBurst(0.8, 'bandpass', 380, 1500, 0.22);
+    tone(120, 60, 0.8, 'sine', 0.06);
+  },
+  splash() {
+    noiseBurst(0.4, 'highpass', 900, 3000, 0.26);
+    tone(420, 160, 0.3, 'sine', 0.07);
+  },
+  squash() {
+    tone(150, 45, 0.26, 'sine', 0.2);
+    noiseBurst(0.1, 'lowpass', 1200, 300, 0.2);
+  },
+  screech() {
+    tone(1800, 900, 0.7, 'sawtooth', 0.06);
+    tone(2050, 1150, 0.7, 'triangle', 0.04, 0.02);
+  },
+  click() { tone(1400, 1400, 0.03, 'square', 0.05); },
+  fanfare() {
+    const notes = [523, 659, 784, 1047];
+    for (let i = 0; i < notes.length; i++) tone(notes[i], notes[i], 0.22, 'triangle', 0.16, i * 0.12);
+  },
+};
+
+// Play a named sound. Silent when muted, not yet unlocked, or over the voice cap.
+function audioPlay(name) {
+  if (!AUDIO.ctx || AUDIO.muted || AUDIO.ctx.state !== 'running') return;
+  if (AUDIO.voices >= CONFIG.maxVoices) return;
+  const fn = SFX[name];
+  if (fn) fn();
+}
+
+// Public audio surface used by the rest of the file.
+AUDIO.play = audioPlay;
+AUDIO.unlock = audioUnlock;
+AUDIO.setMuted = audioSetMuted;
+
+/* =================================================================
+   PARTICLE EFFECTS
+   A fixed pool of small cubes. Each particle moves analytically from
+   its spawn time, so effects stay in step with the sim clock.
+   ================================================================= */
+const FX = {
+  pool: [],          // Particle records, always attached and hidden when idle.
+  next: 0,           // Ring-buffer cursor.
+  group: null,       // Parent group, set in init.
+  geo: null,         // Shared cube geometry.
+  matDust: null,     // Dust material.
+  matWater: null,    // Water-droplet material.
+  matWhite: null,    // White foam material.
+};
+
+// Build the particle pool once.
+function fxInit(group) {
+  FX.group = group;
+  FX.geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+  FX.matDust = new THREE.MeshLambertMaterial({ color: 0xe8dcc0 });
+  FX.matWater = new THREE.MeshLambertMaterial({ color: 0x7fd0ff });
+  FX.matWhite = new THREE.MeshLambertMaterial({ color: 0xf2fbff });
+  for (let i = 0; i < 64; i++) {
+    const m = new THREE.Mesh(FX.geo, FX.matDust);
+    m.visible = false;
+    group.add(m);
+    FX.pool.push({ mesh: m, t0: -10, life: 0.1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, s: 1, on: false });
+  }
+}
+
+// Claim the next particle slot.
+function fxSpawn(mat, x, y, z, vx, vy, vz, life, s) {
+  const p = FX.pool[FX.next];
+  FX.next = (FX.next + 1) % FX.pool.length;
+  p.mesh.material = mat;
+  p.x = x; p.y = y; p.z = z;
+  p.vx = vx; p.vy = vy; p.vz = vz;
+  p.life = life; p.s = s;
+  p.t0 = G.simTime;
+  p.on = true;
+}
+
+// Dust puff for a landing or a squash.
+FX.dust = function (row, x, t) {
+  for (let i = 0; i < 6; i++) {
+    const a = i * (TAU / 6);
+    fxSpawn(FX.matDust, x, 0.08, row, Math.cos(a) * 1.1, 0.9, Math.sin(a) * 1.1, 0.35, 1.1);
+  }
+};
+
+// Ripple droplets for a landing on a log or a lily pad.
+FX.ripple = function (row, x, t) {
+  for (let i = 0; i < 4; i++) {
+    const a = i * (TAU / 4) + 0.4;
+    fxSpawn(FX.matWhite, x, 0.12, row, Math.cos(a) * 0.7, 0.5, Math.sin(a) * 0.7, 0.4, 0.8);
+  }
+};
+
+// Splash burst for drowning.
+FX.splash = function (row, x, t) {
+  for (let i = 0; i < 18; i++) {
+    const a = i * (TAU / 18);
+    const sp = 1.2 + (i % 3) * 0.5;
+    fxSpawn(i % 2 ? FX.matWater : FX.matWhite, x, 0.1, row, Math.cos(a) * sp, 2.2 + (i % 4) * 0.4, Math.sin(a) * sp, 0.6, 1.2);
+  }
+};
+
+// Position every live particle for render time t. Frees expired ones.
+function fxUpdate(t) {
+  for (const p of FX.pool) {
+    if (!p.on) continue;
+    const tau = t - p.t0;
+    if (tau >= p.life) {
+      p.on = false;
+      p.mesh.visible = false;
+      continue;
+    }
+    const a = tau / p.life;
+    p.mesh.visible = true;
+    p.mesh.position.set(p.x + p.vx * tau, Math.max(0.02, p.y + p.vy * tau - 6 * tau * tau), p.z + p.vz * tau);
+    const sc = p.s * (1 - a * 0.7);
+    p.mesh.scale.set(sc, sc, sc);
+  }
+}
+
+// Clear all live particles (used by restart).
+function fxReset() {
+  for (const p of FX.pool) {
+    p.on = false;
+    p.mesh.visible = false;
+  }
+}
+
+/* =================================================================
+   COINS
+   Collected coins are remembered per run. Each pickup chimes, adds to
+   the run total, and adds to the persisted total.
+   ================================================================= */
+function collectCoin(row, slot) {
+  const key = coinKey(row, slot);
+  if (RUN_COINS.has(key)) return;
+  RUN_COINS.add(key);
+  G.runCoins++;
+  G.coins++;
+  storeSet(CONFIG.keyCoins, G.coins);
+  AUDIO.play('coin');
+  UI.refresh();
+}
+
+/* =================================================================
+   UI / HUD MANAGER
+   DOM is written only when a value changes, so the frame loop never
+   touches layout for unchanged numbers.
+   ================================================================= */
+const UI = {
+  els: null,          // Cached DOM elements, set in init.
+  lastScore: -1,      // Last score written to the DOM.
+  lastTop: -1,        // Last top score written to the DOM.
+  lastCoins: -1,      // Last coin count written to the DOM.
+  lastMute: null,     // Last mute label state written to the DOM.
+  screen: 'title',    // Which overlay is showing.
+
+  // Look up and cache every element the UI touches.
+  init() {
+    const $ = (id) => document.getElementById(id);
+    UI.els = {
+      score: $('score'), top: $('top'), coins: $('coins'), mute: $('mute-btn'),
+      title: $('screen-title'), over: $('screen-over'), pause: $('screen-pause'),
+      overScore: $('over-score'), overTop: $('over-top'), overNew: $('over-new'),
+    };
+  },
+
+  // Show one overlay and hide the others. 'none' hides all.
+  show(screen) {
+    const e = UI.els;
+    UI.screen = screen;
+    e.title.classList.toggle('hidden', screen !== 'title');
+    e.over.classList.toggle('hidden', screen !== 'over');
+    e.pause.classList.toggle('hidden', screen !== 'paused');
+  },
+
+  // Fill the game-over texts from the finished run.
+  fillOver() {
+    const e = UI.els;
+    e.overScore.textContent = 'Score ' + G.score;
+    e.overTop.textContent = 'Top ' + G.topScore;
+    e.overNew.classList.toggle('hidden', !G.newTop);
+  },
+
+  // Write any changed numbers into the HUD. Cheap when nothing changed.
+  refresh() {
+    const e = UI.els;
+    if (!e) return;
+    const top = Math.max(G.topScore, G.score);
+    if (G.score !== UI.lastScore) {
+      e.score.textContent = String(G.score);
+      UI.lastScore = G.score;
+    }
+    if (top !== UI.lastTop) {
+      e.top.textContent = 'TOP ' + top;
+      UI.lastTop = top;
+    }
+    if (G.coins !== UI.lastCoins) {
+      e.coins.textContent = String(G.coins);
+      UI.lastCoins = G.coins;
+    }
+    UI.setMutedLabel();
+  },
+
+  // Keep the mute button text in line with the mute flag.
+  setMutedLabel() {
+    const e = UI.els;
+    if (!e) return;
+    if (UI.lastMute !== G.muted) {
+      e.mute.textContent = G.muted ? 'SOUND OFF' : 'SOUND ON';
+      e.mute.setAttribute('aria-pressed', G.muted ? 'true' : 'false');
+      UI.lastMute = G.muted;
+    }
+  },
+};
+
+/* =================================================================
+   INPUT HANDLING
+   Keyboard, mouse, and touch all end in handleDirection() or one of
+   the action helpers below. The test API uses the same functions.
+   ================================================================= */
+
+// Keys mapped to a tile move.
+const KEY_DIR = {
+  ArrowUp: 'up', KeyW: 'up',
+  ArrowDown: 'down', KeyS: 'down',
+  ArrowLeft: 'left', KeyA: 'left',
+  ArrowRight: 'right', KeyD: 'right',
+};
+
+// Start a run from the title screen. No-op in any other mode.
+function startRun() {
+  if (G.mode !== 'title') return;
+  G.mode = 'playing';
+  G.idleTime = 0;
+  UI.show('none');
+}
+
+// Route a direction through the same path as keyboard input.
+function handleDirection(dirName) {
+  if (G.mode === 'title') {
+    startRun();
+    playerInput(dirName);
+    return;
+  }
+  if (G.mode === 'playing') {
+    playerInput(dirName);
+  }
+  // Dying, paused, and game over ignore movement.
+}
+
+// Pause on focus loss or on P / Escape. Only a live run can pause.
+function pauseIfRunning() {
+  if (G.mode === 'playing' || G.mode === 'dying') {
+    G.pausedFrom = G.mode;
+    G.mode = 'paused';
+    UI.show('paused');
+  }
+}
+
+// Toggle pause: resume into the previous mode, or pause a live run.
+function togglePause() {
+  if (G.mode === 'paused') {
+    G.mode = G.pausedFrom;
+    UI.show('none');
+  } else {
+    pauseIfRunning();
+  }
+}
+
+// Mute toggle, persisted. The unmute click confirms the change.
+function toggleMute() {
+  G.muted = !G.muted;
+  storeSet(CONFIG.keyMuted, G.muted ? '1' : '0');
+  AUDIO.setMuted(G.muted);
+  UI.setMutedLabel();
+  if (!G.muted) AUDIO.play('click');
+}
+
+// Restart from the game-over screen (Space, Enter, tap, or the button).
+function restartFromOver() {
+  if (G.mode !== 'gameover') return;
+  gameRestart();
+}
+
+// Keyboard handler on the window.
+function onKeyDown(e) {
+  AUDIO.unlock();
+  if (e.code === 'KeyM') {
+    toggleMute();
+    return;
+  }
+  if (e.code === 'KeyP' || e.code === 'Escape') {
+    if (G.mode === 'title') return;
+    togglePause();
+    e.preventDefault();
+    return;
+  }
+  if (e.repeat) {
+    e.preventDefault();
+    return;
+  }
+  const dirName = KEY_DIR[e.code];
+  if (dirName !== undefined) {
+    e.preventDefault();
+    if (G.mode === 'paused') return;
+    handleDirection(dirName);
+    return;
+  }
+  if (e.code === 'Space' || e.code === 'Enter') {
+    e.preventDefault();
+    if (G.mode === 'title') startRun();
+    else if (G.mode === 'gameover') restartFromOver();
+    return;
+  }
+  if (G.mode === 'title') startRun();
+}
+
+// Swipe and tap tracking for pointer input.
+const POINTER = { id: -1, x0: 0, y0: 0, active: false };
+
+// Pointer down: remember where the touch or click began.
+function onPointerDown(e) {
+  AUDIO.unlock();
+  if (e.target.closest && e.target.closest('#hud-tr')) return;
+  if (G.mode === 'paused') {
+    togglePause();
+    return;
+  }
+  if (G.mode === 'gameover') {
+    restartFromOver();
+    return;
+  }
+  POINTER.id = e.pointerId;
+  POINTER.x0 = e.clientX;
+  POINTER.y0 = e.clientY;
+  POINTER.active = true;
+  if (G.mode === 'title') startRun();
+}
+
+// Pointer up: a short tap hops forward, a clear swipe hops that way.
+function onPointerUp(e) {
+  if (!POINTER.active || e.pointerId !== POINTER.id) return;
+  POINTER.active = false;
+  if (G.mode !== 'playing' && G.mode !== 'title') return;
+  const dx = e.clientX - POINTER.x0;
+  const dy = e.clientY - POINTER.y0;
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  let dirName = 'up';
+  if (Math.max(ax, ay) > 24) {
+    if (ax > ay) dirName = dx > 0 ? 'right' : 'left';
+    else dirName = dy > 0 ? 'down' : 'up';
+  }
+  handleDirection(dirName);
+}
+
+// Visibility and focus: pause when the tab is hidden or loses focus.
+function onVisibility() {
+  if (document.hidden) pauseIfRunning();
+}
+
+function onBlur() {
+  pauseIfRunning();
+}
+
+// Wire every input listener once at startup.
+function wireInput() {
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', () => { POINTER.active = false; });
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('blur', onBlur);
+  const again = document.getElementById('again-btn');
+  if (again) again.addEventListener('click', (e) => { e.stopPropagation(); restartFromOver(); });
+  const mute = UI.els.mute;
+  mute.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    AUDIO.unlock();
+    toggleMute();
+  });
+  mute.addEventListener('click', (e) => e.stopPropagation());
+}
+
+/* =================================================================
+   SCENE, WINDOW, SIMULATION STEP, RENDER, AND MAIN LOOP
+   The sim runs in fixed DT steps from an accumulator. Render runs once
+   per animation frame with the latest state and never changes the sim.
+   ================================================================= */
+let renderer = null;        // WebGLRenderer, set in initScene.
+let scene = null;           // THREE.Scene, set in initScene.
+let worldGroup = null;      // Parent of every live lane group.
+let dirLight = null;        // Shadow-casting directional light.
+let lightTarget = null;     // Target of the directional light (kept in the scene).
+const LANES = new Map();    // Row number to live Lane object.
+const WIN = { lo: 0, hi: -1 }; // Current built window of rows.
+let lastHonkT = -10;        // Sim time of the last car horn or truck rumble.
+
+/* -----------------------------------------------------------------
+   Scene setup. Runs once. Creates lights, the renderer, the groups,
+   the chicken, the eagle, and the particle pool.
+   ----------------------------------------------------------------- */
+function initScene() {
+  const canvas = document.getElementById('gl');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, CONFIG.pixelRatioMax));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x8fd3f7);   // Sky colour.
+
+  CAM.camera = new THREE.OrthographicCamera(-CAM.halfW, CAM.halfW, CAM.halfH, -CAM.halfH, 0.1, 300);
+
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x3c4a5c, 0.85);  // Soft sky fill.
+  scene.add(hemi);
+  dirLight = new THREE.DirectionalLight(0xfff4e0, 1.05);            // Soft light from above.
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(CONFIG.shadowMapSize, CONFIG.shadowMapSize);
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 80;
+  lightTarget = new THREE.Object3D();
+  dirLight.target = lightTarget;
+  scene.add(dirLight);
+  scene.add(lightTarget);
+
+  worldGroup = new THREE.Group();
+  scene.add(worldGroup);
+
+  const fxGroup = new THREE.Group();
+  scene.add(fxGroup);
+  fxInit(fxGroup);
+
+  PLAYER.mesh = MODELS.chicken;
+  scene.add(PLAYER.mesh);
+  DEATH.eagle = MODELS.eagle;
+  DEATH.eagle.visible = false;
+  scene.add(DEATH.eagle);
+}
+
+// Fit the camera and the shadow frustum to the canvas. Called on resize.
+function resizeAll() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  cameraFit(w, h);
+  const s = Math.max(CAM.halfW, CAM.extZ) + 4;
+  const sc = dirLight.shadow.camera;
+  sc.left = -s;
+  sc.right = s;
+  sc.top = s;
+  sc.bottom = -s;
+  sc.updateProjectionMatrix();
+}
+
+/* -----------------------------------------------------------------
+   Lane window. Lanes are built for a band of rows around the camera and
+   released when they fall outside it. Pooled lanes are reused.
+   ----------------------------------------------------------------- */
+
+// Build the lane object for row r and attach it to the world.
+function buildLane(r) {
+  let lane;
+  if (r < 0) {
+    lane = takeLane('wall');
+    lane.setup(r, null);
+  } else {
+    const d = rowDesc(r);
+    lane = takeLane(d.type);
+    lane.setup(r, d);
+    if (d.type === 'rail') initRailCursors(lane);
+  }
+  LANES.set(r, lane);
+  worldGroup.add(lane.group);
+}
+
+// Release the lane for row r back to its pool.
+function releaseLane(r) {
+  const lane = LANES.get(r);
+  if (!lane) return;
+  worldGroup.remove(lane.group);
+  lane.teardown();
+  giveLane(lane);
+  LANES.delete(r);
+}
+
+// Start a track's warning and whoosh cursors at the first train still ahead.
+function initRailCursors(lane) {
+  const trains = lane.L.trains;
+  lane.warnIdx = 0;
+  lane.passIdx = 0;
+  while (lane.warnIdx < trains.length && trains[lane.warnIdx].t - CONFIG.trainWarning <= G.simTime) lane.warnIdx++;
+  while (lane.passIdx < trains.length && trains[lane.passIdx].t <= G.simTime) lane.passIdx++;
+}
+
+// Keep the built window centred on the camera. Only rebuilds when the window moves.
+function syncWindow() {
+  const cz = Math.floor(CAM.z);
+  const lo = cz - CONFIG.windowBehind;
+  const hi = cz + CONFIG.windowAhead;
+  if (lo === WIN.lo && hi === WIN.hi && LANES.size > 0) return;
+  for (const r of Array.from(LANES.keys())) {
+    if (r < lo || r > hi) releaseLane(r);
+  }
+  for (let r = lo; r <= hi; r++) {
+    if (!LANES.has(r)) buildLane(r);
+  }
+  WIN.lo = lo;
+  WIN.hi = hi;
+}
+
+/* -----------------------------------------------------------------
+   Sound cues that come from hazards in the window. Deterministic, so
+   they never touch the world PRNG.
+   ----------------------------------------------------------------- */
+function railCues(t) {
+  for (const lane of LANES.values()) {
+    if (lane.type !== 'rail' || lane.L === null) continue;
+    const trains = lane.L.trains;
+    while (lane.warnIdx < trains.length && trains[lane.warnIdx].t - CONFIG.trainWarning <= t) {
+      AUDIO.play('bell');
+      lane.warnIdx++;
+    }
+    while (lane.passIdx < trains.length && trains[lane.passIdx].t <= t) {
+      AUDIO.play('whoosh');
+      lane.passIdx++;
+    }
+  }
+}
+
+// A car horn, or a truck rumble, when a vehicle passes right beside the player.
+function honkCheck(t) {
+  if (t - lastHonkT < 2) return;
+  for (let r = PLAYER.row - 1; r <= PLAYER.row + 1; r++) {
+    const lane = LANES.get(r);
+    if (!lane || lane.type !== 'road' || lane.L === null) continue;
+    const L = lane.L;
+    for (const v of L.vehicles) {
+      const centre = vehicleLeft(L, v, t) + v.len / 2;
+      if (Math.abs(centre - PLAYER.x) < 1.0) {
+        AUDIO.play(v.len >= 2 ? 'rumble' : 'horn');
+        lastHonkT = t;
+        return;
+      }
+    }
+  }
+}
+
+/* -----------------------------------------------------------------
+   Simulation step. Runs at exactly DT seconds of sim time per call.
+   Order: clock, window, camera, player, hazard checks, eagle, audio,
+   death clock.
+   ----------------------------------------------------------------- */
+function simStep() {
+  if (G.mode === 'paused' || G.mode === 'gameover') return;
+  G.simTime += DT;
+  const t = G.simTime;
+  if (G.mode === 'playing') G.idleTime += DT;
+  syncWindow();
+  // The camera holds still on the title screen so the first hop starts in view.
+  if (G.mode === 'playing' || G.mode === 'dying') cameraStep(DT);
+  if (G.mode === 'playing' || G.mode === 'dying') railCues(t);
+  if (G.mode === 'playing') {
+    playerStep(t);
+  }
+  if (G.mode === 'playing') {
+    if (G.idleTime > CONFIG.idleEagleSeconds) {
+      killPlayer('eagle');
+    } else if (PLAYER.row < cameraBottomZ() + CONFIG.eagleBehindMargin) {
+      killPlayer('eagle');
+    }
+  }
+  if (G.mode === 'playing' && !PLAYER.hop.on && !PLAYER.riding) honkCheck(t);
+  if (G.mode === 'dying') deathStep(t);
+}
+
+// Advance the fixed-step sim by a number of real or test seconds.
+function advance(seconds) {
+  if (G.mode === 'paused' || G.mode === 'gameover') {
+    G.accum = 0;
+    return;
+  }
+  G.accum += seconds;
+  while (G.accum >= DT - 1e-9) {
+    simStep();
+    G.accum -= DT;
+    if (G.mode === 'paused' || G.mode === 'gameover') {
+      G.accum = 0;
+      break;
+    }
+  }
+}
+
+/* -----------------------------------------------------------------
+   World reset and run control. A reset rebuilds all per-run state from
+   the seed. Pooled objects are reused, never disposed.
+   ----------------------------------------------------------------- */
+
+// Start a fresh world with the given seed in the given mode.
+function worldReset(seedValue, mode) {
+  seedRng(seedValue);
+  G.runSeed = seedValue;
+  for (const r of Array.from(LANES.keys())) releaseLane(r);
+  WIN.lo = 0;
+  WIN.hi = -1;
+  resetGen();
+  RUN_COINS.clear();
+  G.mode = mode;
+  G.simTime = 0;
+  G.accum = 0;
+  G.score = 0;
+  G.maxRow = 0;
+  G.idleTime = 0;
+  G.deathType = null;
+  G.newTop = false;
+  G.runCoins = 0;
+  G.pausedFrom = 'playing';
+  lastHonkT = -10;
+  playerReset();
+  PLAYER.mesh.visible = true;
+  cameraReset();
+  DEATH.eagle.visible = false;
+  fxReset();
+  syncWindow();
+  UI.show(mode === 'title' ? 'title' : 'none');
+  UI.refresh();
+}
+
+// Play Again. Rebuilds the world from the current seed and starts playing at once.
+function gameRestart() {
+  worldReset(G.runSeed, 'playing');
+}
+
+// Finish a death: record the best score, persist the coins, and show the game-over screen.
+function finishRun() {
+  G.newTop = G.score > G.topScore;
+  if (G.newTop) {
+    G.topScore = G.score;
+    storeSet(CONFIG.keyTop, G.topScore);
+    AUDIO.play('fanfare');
+  }
+  storeSet(CONFIG.keyCoins, G.coins);
+  UI.fillOver();
+  UI.show('over');
+  UI.refresh();
+}
+
+/* -----------------------------------------------------------------
+   Render. Visual state only, derived from sim state and sim time.
+   ----------------------------------------------------------------- */
+function renderFrame() {
+  const t = G.simTime;
+  for (const lane of LANES.values()) lane.visual(t);
+  if ((G.mode === 'dying' || G.mode === 'gameover') && G.deathType !== null) {
+    deathVisual(t);
+  } else {
+    playerVisual(t);
+    DEATH.eagle.visible = false;
+  }
+  fxUpdate(t);
+  cameraApply();
+  dirLight.position.set(CAM.x + 3, 10, CAM.z - 4);
+  lightTarget.position.set(CAM.x, 0, CAM.z);
+  renderer.render(scene, CAM.camera);
+  UI.refresh();
+}
+
+// Frame loop: fixed-step sim from real elapsed time, then one render.
+let lastFrameMs = 0;
+function frame(now) {
+  if (lastFrameMs === 0) lastFrameMs = now;
+  let dt = (now - lastFrameMs) / 1000;
+  lastFrameMs = now;
+  if (dt > CONFIG.maxFrameDt) dt = CONFIG.maxFrameDt;
+  if (dt < 0) dt = 0;
+  advance(dt);
+  renderFrame();
+  requestAnimationFrame(frame);
+}
+
+/* -----------------------------------------------------------------
+   Test surface. window.HopLaneTest is used by the QA harness. Every
+   method goes through the same code paths as real play.
+   ----------------------------------------------------------------- */
+
+// Describe one generated row for the test surface.
+function describeRow(d) {
+  const lanes = [];
+  if (d.type === 'road') {
+    const L = d.lane;
+    lanes.push({
+      dir: L.dir,
+      speed: L.speed,
+      length: WRAP_PERIOD,
+      gapsMin: L.gapsMin,
+      vehicles: L.vehicles.map((v) => ({ x0: v.a0, len: v.len, kind: v.model })),
+    });
+  } else if (d.type === 'rail') {
+    const L = d.lane;
+    lanes.push({
+      dir: L.dir,
+      speed: L.speed,
+      length: WRAP_PERIOD,
+      gapsMin: CONFIG.trainGapMin,
+      trains: L.trains.map((tr) => ({ t: tr.t, len: tr.len, speed: tr.speed, clearAt: tr.clearAt })),
+    });
+  } else if (d.type === 'river') {
+    const L = d.lane;
+    if (L.kind === 'logs') {
+      lanes.push({
+        kind: 'logs',
+        dir: L.dir,
+        speed: L.speed,
+        segments: L.logs.map((g) => ({ x0: g.off, len: g.len })),
+      });
+    } else {
+      lanes.push({
+        kind: 'pads',
+        dir: 0,
+        speed: 0,
+        segments: L.pads.map((c) => ({ x0: c, len: 1 })),
+      });
+    }
+  }
+  return { index: d.index, type: d.type, obstacles: d.obstacles.slice(), lanes };
+}
+
+// Count every node below the scene root, recursively.
+function countNodes() {
+  let n = 0;
+  scene.traverse((o) => {
+    if (o !== scene) n++;
+  });
+  return n;
+}
+
+function stats() {
+  const info = renderer.info;
+  return {
+    sceneChildren: countNodes(),
+    geometries: info.memory.geometries,
+    textures: info.memory.textures,
+    drawCalls: info.render.calls,
+    liveRows: LANES.size,
+    poolSizes: poolSizes(),
+  };
+}
+
+function testState() {
+  return {
+    mode: G.mode,
+    simTime: G.simTime,
+    score: G.score,
+    topScore: G.topScore,
+    coins: G.coins,
+    row: PLAYER.row,
+    x: PLAYER.x,
+    hopping: PLAYER.hop.on,
+    queued: PLAYER.queued,
+    deathType: (G.mode === 'dying' || G.mode === 'gameover') ? G.deathType : null,
+    idleTime: G.idleTime,
+    muted: G.muted,
+  };
+}
+
+function installTestApi() {
+  window.HopLaneTest = {
+    CONFIG,
+    seed(n) {
+      worldReset(n >>> 0 || 1, 'title');
+    },
+    start() {
+      startRun();
+    },
+    input(dir) {
+      handleDirection(dir);
+    },
+    step(ms) {
+      advance(ms / 1000);
+      return testState();
+    },
+    state() {
+      return testState();
+    },
+    rows(from, to) {
+      const out = [];
+      for (let r = Math.max(0, from); r <= to; r++) out.push(describeRow(rowDesc(r)));
+      return out;
+    },
+    lethalAt(row, x, t) {
+      if (row < 0 || x < CONFIG.colMin || x > CONFIG.colMax) return false;
+      const d = rowDesc(row);
+      if (d.type === 'grass' || d.type === 'start') return false;
+      return queryLane(d).lethalAt(x, t);
+    },
+    supportAt(row, x, t) {
+      if (row < 0) return false;
+      const d = rowDesc(row);
+      if (d.type !== 'river') return false;
+      return queryLane(d).supportAt(x, t);
+    },
+    isBlocked(row, x) {
+      return isBlocked(row, x);
+    },
+    stats() {
+      return stats();
+    },
+    restart() {
+      gameRestart();
+    },
+  };
+}
+
+/* -----------------------------------------------------------------
+   Startup. Builds models and scene, wires input, and starts the loop.
+   ----------------------------------------------------------------- */
+function boot() {
+  UI.init();
+  loadPersisted();
+  AUDIO.muted = G.muted;
+  G.runSeed = ((Date.now() ^ 0x5bd1e995) >>> 0) || 1;
+  buildModels();
+  initScene();
+  wireInput();
+  window.addEventListener('resize', resizeAll);
+  resizeAll();
+  worldReset(G.runSeed, 'title');
+  UI.setMutedLabel();
+  installTestApi();
+  requestAnimationFrame(frame);
+}
+
+/* =================================================================
+   STARTUP
+   Everything above is definitions. Boot runs once, at the end, after
+   the DOM is parsed and the module has finished evaluating.
+   ================================================================= */
+boot();
+</script>
+</body>
+</html>
