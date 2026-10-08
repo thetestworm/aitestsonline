@@ -173,7 +173,7 @@ const CONFIG = {
   maxFrameDt: 0.25,           // Largest slice of real time fed to the accumulator per frame (seconds).
 
   // ---- Lane window (how many rows are built around the camera) -----
-  windowBehind: 14,           // Rows kept built behind the camera centre.
+  windowBehind: 14,           // Minimum rows built behind the camera centre (raised on tall screens to reach the bottom edge).
   windowAhead: 28,            // Rows kept built ahead of the camera centre.
 
   // ---- Generator chunk sizes (rows) -------------------------------
@@ -248,6 +248,7 @@ const CONFIG = {
   cameraPitchRun: 10,         // Horizontal offset along z of the camera from its look point.
   cameraSideRun: 6,           // Horizontal offset along x of the camera (angles the view from the side).
   cameraLead: 2.5,            // Rows the camera keeps ahead of the player.
+  bottomClearance: 1.0,       // World units the bottom screen edge's near ray keeps above the ground.
   cameraFollowRate: 3.2,      // Per-second lerp rate that pulls the camera forward toward the player.
   cameraXFollow: 0.35,        // Fraction of player x offset the camera follows sideways.
   cameraAutoBase: 0.55,       // Auto-advance speed in rows per second at score 0.
@@ -1859,15 +1860,18 @@ const CAM = {
   z: 0,                // Look-at z (forward). Only ever increases.
   halfH: CONFIG.cameraHalfHeight,  // Half height in world units.
   halfW: CONFIG.cameraHalfWidth,   // Half width in world units.
-  sinE: 0.67,          // Sine of the camera elevation, used for z extents.
+  rise: CONFIG.cameraPitchRise,    // Camera height above the look point; cameraFit raises it on tall screens.
+  sinE: 0,             // Sine of the camera elevation, used for z extents. Set below and by cameraFit.
   extZ: 7.5,           // Visible half extent along z in rows.
+  backRows: CONFIG.windowBehind,   // Rows built behind the look point so the bottom edge shows ground.
 };
 
-// Sine of the camera elevation from the fixed offset (side, rise, pull-back).
-(function computeElevation() {
-  const side = CONFIG.cameraSideRun, rise = CONFIG.cameraPitchRise, back = CONFIG.cameraPitchRun;
-  CAM.sinE = rise / Math.sqrt(side * side + rise * rise + back * back);
-})();
+// Sine of the camera elevation for a given rise (side offset and pull-back are fixed).
+function elevationSine(rise) {
+  const side = CONFIG.cameraSideRun, back = CONFIG.cameraPitchRun;
+  return rise / Math.sqrt(side * side + rise * rise + back * back);
+}
+CAM.sinE = elevationSine(CAM.rise);
 
 // Place the camera at the start of a run.
 function cameraReset() {
