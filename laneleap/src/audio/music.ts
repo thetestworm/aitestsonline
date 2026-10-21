@@ -24,14 +24,9 @@ const CHORDS: [number, number[]][] = [
 
 // Melody: 8 bars x 8 eighth-note steps; 0 = rest. Written for Laneleap.
 const MELODY: number[] = [
-  72, 0, 74, 76, 0, 79, 76, 0,
-  74, 0, 72, 69, 0, 72, 0, 0,
-  69, 0, 72, 74, 0, 77, 76, 74,
-  71, 0, 74, 0, 79, 0, 0, 0,
-  76, 0, 79, 81, 0, 79, 76, 0,
-  79, 0, 76, 74, 0, 71, 0, 0,
-  72, 74, 0, 77, 0, 76, 74, 72,
-  74, 0, 0, 71, 0, 67, 0, 0,
+  72, 0, 74, 76, 0, 79, 76, 0, 74, 0, 72, 69, 0, 72, 0, 0, 69, 0, 72, 74, 0, 77, 76, 74, 71, 0, 74,
+  0, 79, 0, 0, 0, 76, 0, 79, 81, 0, 79, 76, 0, 79, 0, 76, 74, 0, 71, 0, 0, 72, 74, 0, 77, 0, 76, 74,
+  72, 74, 0, 0, 71, 0, 67, 0, 0,
 ];
 
 export class Music {
@@ -148,7 +143,13 @@ export class Music {
     this.noiseHit(t, 0.12, 0.18, 1800, 'bandpass');
   }
 
-  private noiseHit(t: number, dur: number, vol: number, freq: number, type: BiquadFilterType): void {
+  private noiseHit(
+    t: number,
+    dur: number,
+    vol: number,
+    freq: number,
+    type: BiquadFilterType,
+  ): void {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;

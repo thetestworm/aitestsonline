@@ -51,7 +51,10 @@ const RARITY_LABEL: Record<Rarity, string> = {
 };
 
 const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+  s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
 
 const coinIcon = '<span class="coin-ico" aria-hidden="true"></span>';
 
@@ -72,7 +75,10 @@ export class UI {
   private lastCoins = -1;
   onAction: (action: string, arg?: string) => void = () => undefined;
 
-  constructor(root: HTMLElement, private readonly model: () => UIModel) {
+  constructor(
+    root: HTMLElement,
+    private readonly model: () => UIModel,
+  ) {
     this.root = root;
     root.innerHTML = `
       <div class="hud" hidden></div>
@@ -186,7 +192,9 @@ export class UI {
   private charactersHtml(m: UIModel): string {
     const s = m.save;
     const filters: ('all' | Rarity)[] = ['all', 'common', 'rare', 'epic', 'secret'];
-    const list = CHARACTERS.filter((c) => this.charFilter === 'all' || c.rarity === this.charFilter);
+    const list = CHARACTERS.filter(
+      (c) => this.charFilter === 'all' || c.rarity === this.charFilter,
+    );
     const cards = list
       .map((c) => {
         const owned = s.unlocked.includes(c.id);
@@ -220,13 +228,16 @@ export class UI {
   }
 
   setFilter(f: string): void {
-    this.charFilter = (['all', 'common', 'rare', 'epic', 'secret'].includes(f) ? f : 'all') as 'all' | Rarity;
+    this.charFilter = (['all', 'common', 'rare', 'epic', 'secret'].includes(f) ? f : 'all') as
+      'all' | Rarity;
     this.refresh();
   }
 
   private prizeHtml(m: UIModel): string {
     const s = m.save;
-    const remaining = CHARACTERS.filter((c) => c.rarity !== 'secret' && !s.unlocked.includes(c.id)).length;
+    const remaining = CHARACTERS.filter(
+      (c) => c.rarity !== 'secret' && !s.unlocked.includes(c.id),
+    ).length;
     const can = s.coins >= PRIZE_COST && remaining > 0;
     return `
       <div class="panel prize">
@@ -364,7 +375,10 @@ export class UI {
     const winner = multi ? [...d.scores].sort((a, b) => b.score - a.score)[0] : null;
     const scores = multi
       ? `<div class="mscores">${d.scores
-          .map((s) => `<div class="ms" style="--pc:${PLAYER_COLORS[s.player]}"><span>P${s.player + 1} · ${esc(s.name)}</span><b>${s.score}</b>${winner && winner.player === s.player ? '<em>WIN</em>' : ''}</div>`)
+          .map(
+            (s) =>
+              `<div class="ms" style="--pc:${PLAYER_COLORS[s.player]}"><span>P${s.player + 1} · ${esc(s.name)}</span><b>${s.score}</b>${winner && winner.player === s.player ? '<em>WIN</em>' : ''}</div>`,
+          )
           .join('')}</div>`
       : `<div class="final">${d.scores[0]?.score ?? 0}</div>`;
     const extra = [
@@ -406,9 +420,16 @@ export class UI {
     const multi = players > 1;
     this.hud.innerHTML = `
       <div class="hud-left">
-        ${multi
-          ? names.map((_n, i) => `<div class="pscore" style="--pc:${PLAYER_COLORS[i]}"><span>P${i + 1}</span><b data-score="${i}">0</b></div>`).join('')
-          : `<div class="score" data-score="0">0</div><div class="best">BEST <span data-best>${this.model().save.bestScore}</span></div>`}
+        ${
+          multi
+            ? names
+                .map(
+                  (_n, i) =>
+                    `<div class="pscore" style="--pc:${PLAYER_COLORS[i]}"><span>P${i + 1}</span><b data-score="${i}">0</b></div>`,
+                )
+                .join('')
+            : `<div class="score" data-score="0">0</div><div class="best">BEST <span data-best>${this.model().save.bestScore}</span></div>`
+        }
       </div>
       <div class="hud-right">
         <div class="coins">${coinIcon}<b data-coins>0</b></div>
@@ -422,7 +443,11 @@ export class UI {
     this.dpad.hidden = !(touchButtons && isTouch && players === 1);
     this.zones.hidden = !(isTouch && multi);
     this.zones.innerHTML = multi
-      ? Array.from({ length: players }, (_, i) => `<div class="zone" style="--pc:${PLAYER_COLORS[i]}"><span>P${i + 1}</span></div>`).join('')
+      ? Array.from(
+          { length: players },
+          (_, i) =>
+            `<div class="zone" style="--pc:${PLAYER_COLORS[i]}"><span>P${i + 1}</span></div>`,
+        ).join('')
       : '';
   }
 

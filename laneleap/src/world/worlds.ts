@@ -193,7 +193,7 @@ export const WORLDS: Record<WorldId, WorldTheme> = {
     rock: 'crystal',
     bush: 'hydrant',
     platform: 'hover',
-    nightBias: 0.55,
+    nightBias: 0.35,
   },
   desert: {
     id: 'desert',

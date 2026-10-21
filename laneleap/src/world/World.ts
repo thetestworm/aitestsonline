@@ -5,12 +5,7 @@
  * and properly disposed when the theme changes.
  */
 import * as THREE from 'three';
-import {
-  DISPOSE_BEHIND,
-  GEN_AHEAD,
-  PLAY_HALF,
-  VISUAL_HALF_WIDTH,
-} from '../core/constants';
+import { DISPOSE_BEHIND, GEN_AHEAD, PLAY_HALF, VISUAL_HALF_WIDTH } from '../core/constants';
 import { LaneGenerator } from './generator';
 import { LaneRuntime, type SlotRef } from './Lane';
 import { InstanceBatch } from '../render/InstanceBatch';
@@ -81,7 +76,11 @@ export class World {
 
   private createBatches(m: EnvModels): Batches {
     const mk = (geo: THREE.BufferGeometry, cap: number, name: string, cast = true) => {
-      const b = new InstanceBatch(geo, this.envMat, cap, { castShadow: cast, receiveShadow: true, name });
+      const b = new InstanceBatch(geo, this.envMat, cap, {
+        castShadow: cast,
+        receiveShadow: true,
+        name,
+      });
       this.group.add(b.mesh);
       return b;
     };
@@ -322,8 +321,10 @@ export class World {
           }
         }
       } else if (kind === 'rail') {
-        if (lane.warnStarted && lane.row > viewMin && lane.row < viewMax) this.onTrain?.(lane.row, 'warn');
-        if (lane.trainEntered && lane.row > viewMin && lane.row < viewMax) this.onTrain?.(lane.row, 'pass');
+        if (lane.warnStarted && lane.row > viewMin && lane.row < viewMax)
+          this.onTrain?.(lane.row, 'warn');
+        if (lane.trainEntered && lane.row > viewMin && lane.row < viewMax)
+          this.onTrain?.(lane.row, 'pass');
         const on = lane.warning;
         for (let i = 0; i < lane.bulbs.length; i++) {
           const r = lane.bulbs[i];
@@ -343,7 +344,13 @@ export class World {
       }
       if (lane.coinSlots.length) {
         for (let i = 0; i < lane.coinSlots.length; i++) {
-          b.coin.set(lane.coinSlots[i], lane.coins[i], 0.45 + Math.sin(t * 3 + i) * 0.06, z, t * 2.5);
+          b.coin.set(
+            lane.coinSlots[i],
+            lane.coins[i],
+            0.45 + Math.sin(t * 3 + i) * 0.06,
+            z,
+            t * 2.5,
+          );
         }
       }
     }

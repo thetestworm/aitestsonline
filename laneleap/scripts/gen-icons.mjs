@@ -45,7 +45,12 @@ function png(size, pixel) {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
-const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), 255];
+const hex = (h) => [
+  parseInt(h.slice(1, 3), 16),
+  parseInt(h.slice(3, 5), 16),
+  parseInt(h.slice(5, 7), 16),
+  255,
+];
 // 32x32 art, drawn as rectangles [x, y, w, h, color] in grid units.
 const art = [
   [0, 0, 32, 32, '#3fa7d6'],
@@ -68,7 +73,8 @@ const art = [
 ];
 function draw(gx, gy) {
   let c = [0, 0, 0, 0];
-  for (const [x, y, w, h, col] of art) if (gx >= x && gx < x + w && gy >= y && gy < y + h) c = hex(col);
+  for (const [x, y, w, h, col] of art)
+    if (gx >= x && gx < x + w && gy >= y && gy < y + h) c = hex(col);
   return c;
 }
 mkdirSync('public/icons', { recursive: true });

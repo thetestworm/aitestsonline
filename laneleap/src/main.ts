@@ -26,7 +26,8 @@ function blockBrowserGestures(): void {
     'touchend',
     (e) => {
       const now = performance.now();
-      if (now - lastTouchEnd < 300 && !(e.target as HTMLElement).closest('button')) e.preventDefault();
+      if (now - lastTouchEnd < 300 && !(e.target as HTMLElement).closest('button'))
+        e.preventDefault();
       lastTouchEnd = now;
     },
     opts,
@@ -54,7 +55,8 @@ async function boot(): Promise<void> {
   blockBrowserGestures();
   registerServiceWorker();
   if (!webglAvailable()) {
-    loading.innerHTML = '<div style="max-width:280px;text-align:center">Laneleap needs WebGL. Try a newer browser or enable hardware acceleration.</div>';
+    loading.innerHTML =
+      '<div style="max-width:280px;text-align:center">Laneleap needs WebGL. Try a newer browser or enable hardware acceleration.</div>';
     return;
   }
   progress(0.15);

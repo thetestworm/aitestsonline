@@ -1,11 +1,6 @@
 /** A hopping player: grid movement state, input buffer and visual animation. */
 import * as THREE from 'three';
-import {
-  HOP_DURATION,
-  HOP_HEIGHT,
-  INPUT_BUFFER_SIZE,
-  LAND_SQUASH_TIME,
-} from '../core/constants';
+import { HOP_DURATION, HOP_HEIGHT, INPUT_BUFFER_SIZE, LAND_SQUASH_TIME } from '../core/constants';
 import type { Dir } from '../core/gestures';
 import type { CharacterDef } from '../data/characters';
 import type { DeathCause } from '../data/missions';
@@ -68,7 +63,12 @@ export class Player {
     this.root.name = `player${index}`;
   }
 
-  setModel(def: CharacterDef, geometry: THREE.BufferGeometry, colors: string[], map: THREE.Texture): void {
+  setModel(
+    def: CharacterDef,
+    geometry: THREE.BufferGeometry,
+    colors: string[],
+    map: THREE.Texture,
+  ): void {
     this.def = def;
     this.colors = colors;
     this.material.map = map;

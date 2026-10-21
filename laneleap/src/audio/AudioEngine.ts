@@ -228,7 +228,13 @@ export class AudioEngine {
   hop(s: HopSound): void {
     const jitter = 1 + (Math.random() - 0.5) * 0.08;
     const wave = this.retro ? 'square' : s.wave;
-    this.tone(wave, s.f0 * jitter, s.f1 * jitter, s.dur, wave === 'square' || wave === 'sawtooth' ? 0.09 : 0.18);
+    this.tone(
+      wave,
+      s.f0 * jitter,
+      s.f1 * jitter,
+      s.dur,
+      wave === 'square' || wave === 'sawtooth' ? 0.09 : 0.18,
+    );
     if (s.noise) this.burst(0.05, s.noise * 0.25, 3000, 'bandpass');
   }
 
@@ -305,11 +311,14 @@ export class AudioEngine {
   }
 
   rattle(): void {
-    for (let i = 0; i < 10; i++) this.burst(0.05, 0.25, 2000 + Math.random() * 2000, 'bandpass', i * 0.09, 3);
+    for (let i = 0; i < 10; i++)
+      this.burst(0.05, 0.25, 2000 + Math.random() * 2000, 'bandpass', i * 0.09, 3);
   }
 
   reveal(): void {
     this.burst(0.3, 0.4, 3000, 'highpass');
-    [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone('triangle', f, f * 1.01, 0.35, 0.14, 0.15 + i * 0.07));
+    [523, 659, 784, 1047, 1319].forEach((f, i) =>
+      this.tone('triangle', f, f * 1.01, 0.35, 0.14, 0.15 + i * 0.07),
+    );
   }
 }

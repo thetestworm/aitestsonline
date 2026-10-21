@@ -11,7 +11,7 @@ window.__autopilot = function autopilot() {
     const v = lane.spec.speed * lane.spec.dir;
     for (let t = t0; t <= t1; t += 0.04) {
       for (const m of lane.movers) {
-        if (Math.abs(m.x + v * t - x) < m.len / 2 + 0.55) return true;
+        if (Math.abs(m.x + v * t - x) < m.len / 2 + 0.45) return true;
       }
     }
     return false;
@@ -22,7 +22,7 @@ window.__autopilot = function autopilot() {
     const k = lane.spec.kind;
     const c = Math.round(x);
     if (k === 'grass') return Math.abs(c) <= 4 && !lane.spec.props.some((pr) => pr.col === c);
-    if (k === 'road') return Math.abs(c) <= 4 && !dangerRoad(lane, c, 0, 0.75);
+    if (k === 'road') return Math.abs(c) <= 4 && !dangerRoad(lane, c, 0, 0.5);
     if (k === 'rail') return Math.abs(c) <= 4 && !lane.warning && !lane.trainActive;
     if (k === 'river') {
       const v = lane.spec.speed * lane.spec.dir;
@@ -44,7 +44,8 @@ window.__autopilot = function autopilot() {
   let threatened = false;
   if (cur && cur.spec.kind === 'road') threatened = dangerRoad(cur, Math.round(x), 0, 0.35);
   if (cur && cur.spec.kind === 'rail') threatened = cur.warning;
-  if (cur && cur.spec.kind === 'river') threatened = Math.abs(x + cur.spec.speed * cur.spec.dir * 0.6) > 3.6;
+  if (cur && cur.spec.kind === 'river')
+    threatened = Math.abs(x + cur.spec.speed * cur.spec.dir * 0.6) > 3.6;
   const sideways = [];
   if (cur && cur.spec.kind === 'river') {
     // Walk against the drift to stay on screen, or along to line up with the next platform.
@@ -58,4 +59,28 @@ window.__autopilot = function autopilot() {
   }
   if (threatened && safeAt(p.row - 1, fx)) return 'ArrowDown';
   return null;
+};
+
+const KEY_DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+// Runs the autopilot inside the page (no CDP round-trips) and auto-retries.
+window.__startAutopilot = function () {
+  window.__runs = 1;
+  window.__best = 0;
+  let overAt = 0;
+  setInterval(() => {
+    const g = window.laneleap;
+    if (!g) return;
+    if (g.state === 'gameover') {
+      if (!overAt) overAt = performance.now();
+      if (performance.now() - overAt > 700) {
+        overAt = 0;
+        window.__runs++;
+        g.onUiAction('retry');
+      }
+      return;
+    }
+    if (g.run) window.__best = Math.max(window.__best, g.run.stats.score);
+    const key = window.__autopilot();
+    if (key) g.onMove(0, KEY_DIR[key]);
+  }, 40);
 };

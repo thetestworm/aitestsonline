@@ -2,12 +2,7 @@
  * One play session: players, camera scrolling, hazards and the predator. All
  * rules live here; presentation (audio, particles, UI) is reached via hooks.
  */
-import {
-  BACK_LIMIT_ROWS,
-  IDLE_LIMIT_SECONDS,
-  MIN_ROW,
-  PLAY_HALF,
-} from '../core/constants';
+import { BACK_LIMIT_ROWS, IDLE_LIMIT_SECONDS, MIN_ROW, PLAY_HALF } from '../core/constants';
 import {
   findPlatform,
   hitSpan,
@@ -116,7 +111,8 @@ export class Run {
       return;
     }
     // Sideways hops along a moving log keep moving with it.
-    const carry = dRow === 0 && p.platformLane && p.platformLane.spec.speed > 0 ? p.platformLane : null;
+    const carry =
+      dRow === 0 && p.platformLane && p.platformLane.spec.speed > 0 ? p.platformLane : null;
     p.startHop(toX, toRow, toY, carry);
     if (dir === 'up' && !this.scrolling) this.scrolling = true;
     this.stats.hops++;
@@ -169,7 +165,11 @@ export class Run {
         this.kill(p, 'vehicle');
         return;
       }
-      if (lane.kind === 'rail' && lane.trainActive && hitSpan(p.x, lane.trainSpans, 1, 0.3, 0) >= 0) {
+      if (
+        lane.kind === 'rail' &&
+        lane.trainActive &&
+        hitSpan(p.x, lane.trainSpans, 1, 0.3, 0) >= 0
+      ) {
         p.deathDir = lane.spec.dir;
         this.kill(p, 'train');
         return;

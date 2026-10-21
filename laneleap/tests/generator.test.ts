@@ -71,7 +71,9 @@ describe('LaneGenerator', () => {
     const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
     expect(avg(late.map((l) => l.speed))).toBeGreaterThan(avg(early.map((l) => l.speed)));
     const grassEarly = lanes.filter((l) => l.kind === 'grass' && l.row > 5 && l.row < 100).length;
-    const grassLate = lanes.filter((l) => l.kind === 'grass' && l.row > 2000 && l.row < 2095).length;
+    const grassLate = lanes.filter(
+      (l) => l.kind === 'grass' && l.row > 2000 && l.row < 2095,
+    ).length;
     expect(grassLate).toBeLessThanOrEqual(grassEarly + 5);
   });
 

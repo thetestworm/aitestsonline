@@ -12,7 +12,14 @@
   --sar: env(safe-area-inset-right, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
   color: var(--ink);
 }
 
@@ -75,7 +82,9 @@ body {
   padding: 10px 16px;
   box-shadow: 0 5px 0 var(--ink);
   cursor: pointer;
-  transition: transform 0.06s, box-shadow 0.06s;
+  transition:
+    transform 0.06s,
+    box-shadow 0.06s;
   touch-action: manipulation;
   min-height: 46px;
 }
@@ -128,10 +137,14 @@ body {
 @keyframes glow {
   0%,
   100% {
-    box-shadow: 0 5px 0 var(--ink), 0 0 0 0 rgba(255, 207, 63, 0.8);
+    box-shadow:
+      0 5px 0 var(--ink),
+      0 0 0 0 rgba(255, 207, 63, 0.8);
   }
   50% {
-    box-shadow: 0 5px 0 var(--ink), 0 0 0 7px rgba(255, 207, 63, 0);
+    box-shadow:
+      0 5px 0 var(--ink),
+      0 0 0 7px rgba(255, 207, 63, 0);
   }
 }
 
@@ -155,7 +168,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal));
+  padding: calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab))
+    calc(12px + var(--sal));
   pointer-events: auto;
   background: radial-gradient(ellipse at center, rgba(20, 30, 60, 0.15), rgba(20, 30, 60, 0.45));
   animation: fade 0.18s ease-out;
@@ -436,11 +450,30 @@ body {
   border-radius: 8px;
   background: linear-gradient(#ff5fa2 50%, #fff 50%);
 }
-.c1 { left: 14px; bottom: 6px; }
-.c2 { left: 52px; bottom: 4px; background: linear-gradient(#3fc1ff 50%, #fff 50%); }
-.c3 { left: 92px; bottom: 8px; background: linear-gradient(#ffd23f 50%, #fff 50%); }
-.c4 { left: 34px; bottom: 40px; background: linear-gradient(#7cff6b 50%, #fff 50%); }
-.c5 { left: 76px; bottom: 42px; background: linear-gradient(#b388ff 50%, #fff 50%); }
+.c1 {
+  left: 14px;
+  bottom: 6px;
+}
+.c2 {
+  left: 52px;
+  bottom: 4px;
+  background: linear-gradient(#3fc1ff 50%, #fff 50%);
+}
+.c3 {
+  left: 92px;
+  bottom: 8px;
+  background: linear-gradient(#ffd23f 50%, #fff 50%);
+}
+.c4 {
+  left: 34px;
+  bottom: 40px;
+  background: linear-gradient(#7cff6b 50%, #fff 50%);
+}
+.c5 {
+  left: 76px;
+  bottom: 42px;
+  background: linear-gradient(#b388ff 50%, #fff 50%);
+}
 .base {
   position: relative;
   height: 70px;
@@ -862,10 +895,22 @@ body {
   transform: translateY(3px);
   box-shadow: 0 1px 0 var(--ink);
 }
-.dp.up { left: 62px; top: 0; }
-.dp.down { left: 62px; bottom: 0; }
-.dp.left { left: 0; top: 62px; }
-.dp.right { right: 0; top: 62px; }
+.dp.up {
+  left: 62px;
+  top: 0;
+}
+.dp.down {
+  left: 62px;
+  bottom: 0;
+}
+.dp.left {
+  left: 0;
+  top: 62px;
+}
+.dp.right {
+  right: 0;
+  top: 62px;
+}
 
 /* ------------------------------------------------------------------ toasts & debug */
 
@@ -888,7 +933,9 @@ body {
   font-weight: 900;
   box-shadow: 0 4px 0 var(--ink);
   animation: pop 0.25s cubic-bezier(0.2, 1.6, 0.4, 1);
-  transition: opacity 0.4s, transform 0.4s;
+  transition:
+    opacity 0.4s,
+    transform 0.4s;
   max-width: 90vw;
   text-align: center;
 }
@@ -910,7 +957,11 @@ body {
   padding: 6px 8px;
   background: rgba(0, 0, 0, 0.6);
   color: #9f9;
-  font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace;
+  font:
+    11px/1.35 ui-monospace,
+    Menlo,
+    Consolas,
+    monospace;
   border-radius: 6px;
 }
 

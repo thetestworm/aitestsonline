@@ -30,12 +30,7 @@ import {
   type SaveData,
 } from '../core/save';
 import { AutoQuality, QUALITY_LEVELS, defaultQualityFor, type QualityName } from '../core/quality';
-import {
-  CHARACTERS,
-  RARITY_WEIGHT,
-  getCharacter,
-  type CharacterDef,
-} from '../data/characters';
+import { CHARACTERS, RARITY_WEIGHT, getCharacter, type CharacterDef } from '../data/characters';
 import {
   ACHIEVEMENTS,
   applyRunToMission,
@@ -43,11 +38,7 @@ import {
   missionText,
   type DeathCause,
 } from '../data/missions';
-import {
-  DAILY_GIFT_MAX,
-  DAILY_GIFT_MIN,
-  PRIZE_COST,
-} from '../core/constants';
+import { DAILY_GIFT_MAX, DAILY_GIFT_MIN, PRIZE_COST } from '../core/constants';
 
 type State = 'menu' | 'playing' | 'paused' | 'gameover';
 
@@ -106,10 +97,13 @@ export class Game {
       this.predators.push(pr);
       this.stage.scene.add(pr.mesh);
     }
-    this.world.onTrain = (_row, ev) => (ev === 'warn' ? this.audio.trainBell() : this.audio.trainPass());
+    this.world.onTrain = (_row, ev) =>
+      ev === 'warn' ? this.audio.trainBell() : this.audio.trainPass();
 
     const startQ: QualityName =
-      this.save.settings.quality === 'auto' ? defaultQualityFor(this.isTouch) : this.save.settings.quality;
+      this.save.settings.quality === 'auto'
+        ? defaultQualityFor(this.isTouch)
+        : this.save.settings.quality;
     this.quality = new AutoQuality(startQ, (q) => {
       this.applyQuality(q.name);
       this.ui.toast(`Graphics lowered to ${q.name} for smoother play`);
@@ -238,7 +232,8 @@ export class Game {
   }
 
   private startPlaying(): void {
-    if (!this.run || this.run.elapsed > 0.01 || this.run.players.some((p) => p.hasMoved)) this.prepareRun();
+    if (!this.run || this.run.elapsed > 0.01 || this.run.players.some((p) => p.hasMoved))
+      this.prepareRun();
     this.state = 'playing';
     this.input.players = this.playerCount;
     this.input.swipe = this.save.settings.touchControls === 'swipe' || this.playerCount > 1;
@@ -246,7 +241,12 @@ export class Game {
     this.input.reset();
     this.ui.show('none');
     const names = this.run!.players.map((p) => p.def.name);
-    this.ui.showHud(this.playerCount, names, this.save.settings.touchControls === 'buttons', this.isTouch);
+    this.ui.showHud(
+      this.playerCount,
+      names,
+      this.save.settings.touchControls === 'buttons',
+      this.isTouch,
+    );
     this.ui.setCoins(this.save.coins);
     this.audio.setMusicIntensity(0);
     this.loop.resetClock();
@@ -260,14 +260,24 @@ export class Game {
       const z = -p.visualRow;
       this.emit('dust', p.x, p.y + 0.05, z, 2, ['#ffffff', '#e8e2d0']);
       if (p.def.special === 'rainbowTrail') {
-        this.emit('rainbow', p.x, p.y + 0.3, z, 4, ['#ff5fa2', '#ffb347', '#ffe066', '#7ee8a5', '#7ad3ff', '#b388ff']);
+        this.emit('rainbow', p.x, p.y + 0.3, z, 4, [
+          '#ff5fa2',
+          '#ffb347',
+          '#ffe066',
+          '#7ee8a5',
+          '#7ad3ff',
+          '#b388ff',
+        ]);
       }
     },
     bump: () => this.audio.bump(),
     land: (p, lane) => {
       const z = -p.visualRow;
       if (lane?.kind === 'river') {
-        this.emit('splash', p.x, 0, z, 3, [WORLDS[this.themeId ?? 'meadow'].ground.water, '#ffffff']);
+        this.emit('splash', p.x, 0, z, 3, [
+          WORLDS[this.themeId ?? 'meadow'].ground.water,
+          '#ffffff',
+        ]);
       } else {
         this.emit('dust', p.x, 0.02, z, 3, ['#ffffff', '#ddd6c0']);
       }
@@ -296,7 +306,14 @@ export class Game {
     },
   };
 
-  private emit(preset: ParticlePreset, x: number, y: number, z: number, n: number, colors: readonly string[]): void {
+  private emit(
+    preset: ParticlePreset,
+    x: number,
+    y: number,
+    z: number,
+    n: number,
+    colors: readonly string[],
+  ): void {
     this.particles.emit(preset, x, y, z, n, colors);
   }
 
@@ -320,7 +337,11 @@ export class Game {
       case 'water':
       case 'drift':
         this.audio.splash();
-        this.emit('splash', x, -0.1, z, 18, [WORLDS[this.themeId ?? 'meadow'].ground.water, '#ffffff', '#d6f6ff']);
+        this.emit('splash', x, -0.1, z, 18, [
+          WORLDS[this.themeId ?? 'meadow'].ground.water,
+          '#ffffff',
+          '#d6f6ff',
+        ]);
         if (shake) this.stage.shake(0.1);
         break;
       case 'predator':
@@ -337,7 +358,13 @@ export class Game {
         this.emit('sparks', x, y + 0.4, z, 16, ['#fff36b', '#ffb02e', '#ffffff']);
         break;
       case 'confetti':
-        this.emit('confetti', x, y + 0.4, z, 20, ['#ff5fa2', '#ffd23f', '#3fc1ff', '#7cff6b', '#b388ff']);
+        this.emit('confetti', x, y + 0.4, z, 20, [
+          '#ff5fa2',
+          '#ffd23f',
+          '#3fc1ff',
+          '#7cff6b',
+          '#b388ff',
+        ]);
         break;
       case 'poof':
         this.emit('poof', x, y + 0.3, z, 12, ['#ffffff', '#f0f0f0']);
@@ -419,7 +446,14 @@ export class Game {
     this.ambientTimer = 0.12;
     if (this.themeId === 'tundra') {
       const f = this.stage.focus;
-      this.particles.emit('snow', f.x + (Math.random() - 0.5) * 18, 7, f.z + (Math.random() - 0.5) * 18, 2, ['#ffffff']);
+      this.particles.emit(
+        'snow',
+        f.x + (Math.random() - 0.5) * 18,
+        7,
+        f.z + (Math.random() - 0.5) * 18,
+        2,
+        ['#ffffff'],
+      );
     }
     for (const p of this.run.players) {
       if (p.alive && p.def.special === 'glow' && this.stage.night > 0.4 && Math.random() < 0.4) {
@@ -433,7 +467,7 @@ export class Game {
     if (run) {
       // In menus the camera frames the character above the menu panel.
       const portrait = window.innerWidth < window.innerHeight;
-      const target = this.state === 'menu' ? (portrait ? -3.2 : 0.5) : this.lookAhead;
+      const target = this.state === 'menu' ? (portrait ? -3.2 : -2.6) : this.lookAhead;
       this.viewOffset += (target - this.viewOffset) * Math.min(1, frameDt * 4);
       this.stage.focus.set(run.focusX, 0, -(run.focusRow + this.viewOffset));
     }
@@ -554,7 +588,11 @@ export class Game {
       case 'missions':
       case 'settings':
       case 'prize':
-        if (this.ui.screen === 'menu' || this.ui.screen === 'gameover' || this.ui.screen === 'pause') {
+        if (
+          this.ui.screen === 'menu' ||
+          this.ui.screen === 'gameover' ||
+          this.ui.screen === 'pause'
+        ) {
           this.returnTo = this.ui.screen;
         }
         this.ui.show(action);
@@ -635,7 +673,8 @@ export class Game {
   private openLobby(): void {
     const owned = CHARACTERS.filter((c) => this.save.unlocked.includes(c.id)).map((c) => c.id);
     while (this.lobby.length < 4) {
-      const base = this.lobby.length === 0 ? this.save.selected : owned[this.lobby.length % owned.length];
+      const base =
+        this.lobby.length === 0 ? this.save.selected : owned[this.lobby.length % owned.length];
       this.lobby.push(base);
     }
     this.lobby[0] = this.lobby[0] ?? this.save.selected;
@@ -749,7 +788,11 @@ export class Game {
 
     const unlocked: string[] = [];
     for (const c of CHARACTERS) {
-      if (c.secret && !save.unlocked.includes(c.id) && this.statValue(c.secret.stat) >= c.secret.value) {
+      if (
+        c.secret &&
+        !save.unlocked.includes(c.id) &&
+        this.statValue(c.secret.stat) >= c.secret.value
+      ) {
         save.unlocked.push(c.id);
         unlocked.push(c.name);
       }
@@ -828,7 +871,8 @@ export class Game {
     if (!giftAvailable(this.save, now)) return;
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
-    this.save.giftStreak = this.save.lastGiftDay === localDay(yesterday) ? this.save.giftStreak + 1 : 1;
+    this.save.giftStreak =
+      this.save.lastGiftDay === localDay(yesterday) ? this.save.giftStreak + 1 : 1;
     const bonus = Math.min(this.save.giftStreak - 1, 5) * 10;
     const amount = this.rng.int(DAILY_GIFT_MIN, DAILY_GIFT_MAX) + bonus;
     this.save.coins += amount;

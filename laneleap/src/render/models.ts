@@ -98,7 +98,8 @@ function tree(b: VoxelBuilder, theme: WorldTheme, tall: boolean): VoxelBuilder {
     case 'tower': {
       const h = tall ? 18 : 10;
       b.cbox(0, 0, 0, 5, h, 5, e('trunk'));
-      for (let y = 3; y < h - 1; y += 4) b.cbox(0, y, 0, 5.4, 1, 5.4, e(y % 8 === 3 ? 'leaf1' : 'leaf2'));
+      for (let y = 3; y < h - 1; y += 4)
+        b.cbox(0, y, 0, 5.4, 1, 5.4, e(y % 8 === 3 ? 'leaf1' : 'leaf2'));
       b.cbox(0, h, 0, 1, 3, 1, e('trunkDark')).cbox(0, h + 3, 0, 1.6, 1.6, 1.6, e('leaf3'));
       break;
     }
@@ -203,7 +204,8 @@ function vehicle(b: VoxelBuilder, v: number): VoxelBuilder {
       b.cbox(-4.5, 10.5, 0, 3, 1, 3, e('trim'));
     }
     b.cbox(0, 0.5, 0, L, 1.5, 8, e('trainDark'));
-    for (const x of [-10, -6, 9]) for (const z of [-4.2, 4.2]) b.cbox(x, 0, z, 3.4, 3.4, 1.4, wheel);
+    for (const x of [-10, -6, 9])
+      for (const z of [-4.2, 4.2]) b.cbox(x, 0, z, 3.4, 3.4, 1.4, wheel);
   }
   return b;
 }
@@ -215,7 +217,15 @@ function platform(b: VoxelBuilder, theme: WorldTheme, len: number): VoxelBuilder
     case 'log':
       b.cbox(0, -2, 0, L, 4.5, 8, e('log'));
       b.cbox(0, 2.5, 0, L - 2, 0.6, 5, e('logDark'));
-      b.cbox(L / 2, -1.5, 0, 0.6, 3.6, 7, e('logEnd')).cbox(-L / 2, -1.5, 0, 0.6, 3.6, 7, e('logEnd'));
+      b.cbox(L / 2, -1.5, 0, 0.6, 3.6, 7, e('logEnd')).cbox(
+        -L / 2,
+        -1.5,
+        0,
+        0.6,
+        3.6,
+        7,
+        e('logEnd'),
+      );
       for (let x = -L / 2 + 4; x < L / 2 - 2; x += 6) b.cbox(x, -2, 0, 1, 4.7, 8.2, e('logDark'));
       break;
     case 'floe':
@@ -224,8 +234,17 @@ function platform(b: VoxelBuilder, theme: WorldTheme, len: number): VoxelBuilder
       b.cbox(L / 4, -2, 4.3, L / 3, 3, 1, e('logDark'));
       break;
     case 'raft':
-      for (let z = -3.6; z <= 3.6; z += 2.4) b.cbox(0, -2, z, L, 3.6, 2.2, e(z > 0 ? 'log' : 'logDark'));
-      b.cbox(-L / 2 + 2, 1.6, 0, 1.4, 0.6, 9, e('logEnd')).cbox(L / 2 - 2, 1.6, 0, 1.4, 0.6, 9, e('logEnd'));
+      for (let z = -3.6; z <= 3.6; z += 2.4)
+        b.cbox(0, -2, z, L, 3.6, 2.2, e(z > 0 ? 'log' : 'logDark'));
+      b.cbox(-L / 2 + 2, 1.6, 0, 1.4, 0.6, 9, e('logEnd')).cbox(
+        L / 2 - 2,
+        1.6,
+        0,
+        1.4,
+        0.6,
+        9,
+        e('logEnd'),
+      );
       break;
     case 'wafer':
       b.cbox(0, -2, 0, L, 4, 8, e('log'));
@@ -259,7 +278,15 @@ function locomotive(b: VoxelBuilder): VoxelBuilder {
   b.cbox(L / 2 - 2, 7.5, 0, 3, 3, 8, e('window'));
   b.cbox(-6, 8, 0, 10, 2.4, 9.3, e('window'));
   b.cbox(L / 2 + 0.6, 1, 0, 1.6, 4, 8, e('trainDark'));
-  b.cbox(L / 2, 4, 3, 0.8, 1.4, 1.6, e('headlight')).cbox(L / 2, 4, -3, 0.8, 1.4, 1.6, e('headlight'));
+  b.cbox(L / 2, 4, 3, 0.8, 1.4, 1.6, e('headlight')).cbox(
+    L / 2,
+    4,
+    -3,
+    0.8,
+    1.4,
+    1.6,
+    e('headlight'),
+  );
   b.cbox(0, 0, 0, L - 2, 2, 7, e('trainDark'));
   for (let x = -11; x <= 11; x += 5.5) b.cbox(x, 0, 0, 3, 2.6, 9.4, e('wheel'));
   return b;

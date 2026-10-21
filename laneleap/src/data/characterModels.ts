@@ -119,7 +119,15 @@ export function buildCharacterModel(def: CharacterDef, atlas: PaletteAtlas): Cha
       b.cbox(-a.eyeX, a.eyeY - 0.1, a.front + 0.3, s + 0.4, s + 0.4, 0.4, BLACK);
       b.cbox(0, a.eyeY + s, a.front + 0.3, a.headW, 0.3, 0.3, BLACK);
     } else {
-      b.pair(a.eyeX + (has('bigEyes') ? 0.3 : 0), a.eyeY + 0.2, a.front + 0.4, s / 2, s / 2, 0.3, BLACK);
+      b.pair(
+        a.eyeX + (has('bigEyes') ? 0.3 : 0),
+        a.eyeY + 0.2,
+        a.front + 0.4,
+        s / 2,
+        s / 2,
+        0.3,
+        BLACK,
+      );
     }
   }
 
@@ -158,7 +166,8 @@ export function buildCharacterModel(def: CharacterDef, atlas: PaletteAtlas): Cha
         b.cbox(0, 3.4, a.back - 3.8, 2, 2, 0.6, accent);
         break;
       case 'stripes':
-        for (let i = 0; i < 3; i++) b.cbox(0, 2.5 + i * 1.4, a.back + 1 + i * 0.2, a.headW + 0.2, 0.5, 2.6, detail);
+        for (let i = 0; i < 3; i++)
+          b.cbox(0, 2.5 + i * 1.4, a.back + 1 + i * 0.2, a.headW + 0.2, 0.5, 2.6, detail);
         break;
       case 'spots':
         b.pair(2.1, 3.5, -1.5, 2, 0.4, 1.4, accent);
@@ -264,7 +273,8 @@ export function buildCharacterModel(def: CharacterDef, atlas: PaletteAtlas): Cha
         b.cbox(0, a.eyeY + 0.5, a.front + 0.5, 1.2, 0.4, 0.3, accent);
         break;
       case 'checker':
-        for (let i = 0; i < 6; i++) b.cbox(-2.75 + i * 1.1, 3.4, 2.55, 1.1, 0.9, 0.2, i % 2 ? second : accent);
+        for (let i = 0; i < 6; i++)
+          b.cbox(-2.75 + i * 1.1, 3.4, 2.55, 1.1, 0.9, 0.2, i % 2 ? second : accent);
         break;
       case 'roofSign':
         b.cbox(0, 7, 0, 3, 1.4, 1.2, accent);
@@ -337,7 +347,13 @@ export function buildCharacterModel(def: CharacterDef, atlas: PaletteAtlas): Cha
         break;
       case 'crown':
         b.cbox(0, top + 2, 0, 4, 1, 4, '#fff1a8');
-        for (const [x, z] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) b.cbox(x, top + 3, z, 0.8, 1, 0.8, '#fff1a8');
+        for (const [x, z] of [
+          [-1.5, -1.5],
+          [1.5, -1.5],
+          [-1.5, 1.5],
+          [1.5, 1.5],
+        ])
+          b.cbox(x, top + 3, z, 0.8, 1, 0.8, '#fff1a8');
         b.cbox(0, top + 2.4, 2.05, 0.8, 0.6, 0.1, '#ff4b6e');
         break;
       case 'bigEyes':

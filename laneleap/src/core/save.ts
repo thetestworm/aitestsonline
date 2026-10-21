@@ -133,7 +133,9 @@ export function sanitize(s: Raw): SaveData {
     : [];
   if (!unlocked.includes(DEFAULT_CHARACTER)) unlocked.unshift(DEFAULT_CHARACTER);
   const selected =
-    typeof s.selected === 'string' && unlocked.includes(s.selected) ? s.selected : DEFAULT_CHARACTER;
+    typeof s.selected === 'string' && unlocked.includes(s.selected)
+      ? s.selected
+      : DEFAULT_CHARACTER;
   const st = isObj(s.settings) ? s.settings : {};
   const stats = isObj(s.stats) ? s.stats : {};
   const quality = ['auto', 'high', 'medium', 'low'].includes(st.quality as string)

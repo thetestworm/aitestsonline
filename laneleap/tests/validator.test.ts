@@ -54,7 +54,16 @@ describe('reachability', () => {
 
   it('detects disconnected pockets', () => {
     // Row 1 open only at -4, row 2 open only at +4 and there is no lateral connection.
-    const lanes = [grass(1, allCols.filter((c) => c !== -4)), grass(2, allCols.filter((c) => c !== 4))];
+    const lanes = [
+      grass(
+        1,
+        allCols.filter((c) => c !== -4),
+      ),
+      grass(
+        2,
+        allCols.filter((c) => c !== 4),
+      ),
+    ];
     expect(validateLayout(lanes, ALL_COLS).ok).toBe(false);
   });
 
@@ -68,7 +77,16 @@ describe('reachability', () => {
   it('lily pads must line up with the reachable columns', () => {
     expect(stepReachable(colBit(0), lily(1, [2, 3]))).toBe(0);
     expect(stepReachable(colBit(2), lily(1, [2, 3]))).toBe(colBit(2) | colBit(3));
-    const res = validateLayout([grass(1, allCols.filter((c) => c !== 0)), lily(2, [3])], ALL_COLS);
+    const res = validateLayout(
+      [
+        grass(
+          1,
+          allCols.filter((c) => c !== 0),
+        ),
+        lily(2, [3]),
+      ],
+      ALL_COLS,
+    );
     expect(res.ok).toBe(false);
   });
 

@@ -136,7 +136,10 @@ export class Stage {
     this.sky.copy(this.skyDay).lerp(this.skyNight, n);
     this.scene.background = this.sky;
     const dusk = 1 - Math.abs(n - 0.5) * 2;
-    this.tmpColor.copy(this.sunDay).lerp(this.sunNight, n).lerp(this.sunDusk, dusk * 0.6);
+    this.tmpColor
+      .copy(this.sunDay)
+      .lerp(this.sunNight, n)
+      .lerp(this.sunDusk, dusk * 0.6);
     this.sun.color.copy(this.tmpColor);
     this.sun.intensity = 2.5 - 1.9 * n;
     this.hemi.intensity = 1.65 - 0.95 * n;

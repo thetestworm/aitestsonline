@@ -23,15 +23,7 @@ import {
 export const START_WALL_ROW = -3;
 export const START_CLEAR_ROWS = 4;
 
-type GroupKind =
-  | 'meadow'
-  | 'forest'
-  | 'road'
-  | 'highway'
-  | 'river'
-  | 'lily'
-  | 'rail'
-  | 'railroad';
+type GroupKind = 'meadow' | 'forest' | 'road' | 'highway' | 'river' | 'lily' | 'rail' | 'railroad';
 
 const PROP_WEIGHTS: Record<PropType, number> = {
   treeTall: 0.3,
@@ -160,7 +152,7 @@ export class LaneGenerator {
           const ldir = dir;
           if (i > 0 && rng.chance(0.15)) push((row) => this.lily(row, d, g));
           else push((row) => this.river(row, d, ldir, g));
-          dir = (-dir) as 1 | -1;
+          dir = -dir as 1 | -1;
         }
         break;
       }

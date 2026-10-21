@@ -48,7 +48,13 @@ export class LaneRuntime {
     this.spec = spec;
     this.row = spec.row;
     this.coins = spec.coins.slice();
-    this.movers = spec.movers.map((m) => ({ x: m.x, len: m.len, variant: m.variant, batch: null, slot: -1 }));
+    this.movers = spec.movers.map((m) => ({
+      x: m.x,
+      len: m.len,
+      variant: m.variant,
+      batch: null,
+      slot: -1,
+    }));
     this.rng = new Rng(spec.row * 7919 + 17);
     if (spec.rail) {
       this.trainLen = 3 + spec.rail.cars * 3;
