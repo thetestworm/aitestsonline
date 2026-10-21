@@ -20,7 +20,7 @@ function memStore(init: Record<string, string> = {}): KVStore & { data: Record<s
       data[k] = v;
     },
     removeItem: (k) => {
-      delete data[k];
+      Reflect.deleteProperty(data, k);
     },
   };
 }

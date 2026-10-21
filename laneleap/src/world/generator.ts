@@ -50,7 +50,7 @@ export class LaneGenerator {
   repairs = 0;
   fallbacks = 0;
 
-  constructor(seed: number, firstRow = -7) {
+  constructor(seed: number, firstRow = -14) {
     this.rng = new Rng(seed);
     this.row = firstRow;
   }

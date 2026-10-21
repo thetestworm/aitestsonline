@@ -4,7 +4,7 @@ import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'public/sw.js', 'coverage'] },
+  { ignores: ['dist', 'node_modules', 'src/sw-template.js', 'coverage', 'perf-results'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   prettier,

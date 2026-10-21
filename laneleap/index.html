@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#3fa7d6" />
+    <meta name="description" content="Laneleap — hop across endless roads, rivers and rails. An original voxel arcade game." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Laneleap" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <title>Laneleap</title>
+    <style>
+      /* Critical CSS for the loading screen so it paints before any JS. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #9fe3ff;
+        overflow: hidden;
+      }
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: linear-gradient(#9fe3ff, #c9f1ff);
+        font: 800 20px/1.2 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        color: #23324a;
+        z-index: 50;
+        transition: opacity 0.35s;
+      }
+      #loading.done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #loading .hopper {
+        width: 46px;
+        height: 46px;
+        background: #8ee05a;
+        border-radius: 6px;
+        box-shadow: inset -8px -8px 0 #5fb83a;
+        animation: hop 0.6s ease-in-out infinite;
+      }
+      #loading .bar {
+        width: 180px;
+        height: 10px;
+        border-radius: 6px;
+        background: rgba(35, 50, 74, 0.15);
+        overflow: hidden;
+      }
+      #loading .bar i {
+        display: block;
+        height: 100%;
+        width: 8%;
+        background: #23324a;
+        transition: width 0.25s;
+      }
+      @keyframes hop {
+        0%, 100% { transform: translateY(0) scale(1.1, 0.9); }
+        50% { transform: translateY(-26px) scale(0.92, 1.08); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game" aria-label="Laneleap game"></canvas>
+      <div id="ui"></div>
+    </div>
+    <div id="loading" role="status">
+      <div class="hopper"></div>
+      <div>LANELEAP</div>
+      <div class="bar"><i></i></div>
+      <noscript>Laneleap needs JavaScript and WebGL.</noscript>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
