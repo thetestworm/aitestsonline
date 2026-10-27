@@ -1,7 +1,7 @@
 // HEAT RUN: game orchestration — modes, input, simulation step, camera,
 // collisions, career flow and post-event screens.
 import * as THREE from 'three';
-import { World, BOUND, districtOf, DISTRICT_NAMES, nodePos, lineAt } from './world.js';
+import { World, BOUND, districtOf, DISTRICT_NAMES, nodePos, lineAt, CURB_H } from './world.js';
 import { buildCar } from './carmesh.js';
 import { Vehicle, collideStatic, collidePair } from './vehicle.js';
 import { Traffic } from './traffic.js';
@@ -63,6 +63,38 @@ class Particles {
   }
 }
 
+// Tyre marks laid behind sliding rear wheels; a ring buffer of instanced quads.
+class SkidMarks {
+  constructor(scene, max = 1600) {
+    const g = new THREE.PlaneGeometry(0.26, 1).rotateX(-Math.PI / 2);
+    const m = new THREE.MeshBasicMaterial({ color: 0x0a0908, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+    this.mesh = new THREE.InstancedMesh(g, m, max);
+    this.mesh.count = 0; this.mesh.frustumCulled = false;
+    this.max = max; this.i = 0; this.prev = new Map();
+    this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.up = new THREE.Vector3(0, 1, 0); this.v = new THREE.Vector3(); this.s = new THREE.Vector3();
+    scene.add(this.mesh);
+  }
+  // key identifies a wheel; call every frame with sliding=false to break the trail
+  mark(key, x, y, z, sliding) {
+    const p = this.prev.get(key);
+    if (!sliding) { this.prev.delete(key); return; }
+    if (p) {
+      const dx = x - p.x, dz = z - p.z, len = Math.hypot(dx, dz);
+      if (len < 0.25) return;
+      if (len < 4) {
+        this.q.setFromAxisAngle(this.up, Math.atan2(dx, dz));
+        this.m.compose(this.v.set((x + p.x) / 2, y + 0.01, (z + p.z) / 2), this.q, this.s.set(1, 1, len + 0.05));
+        this.mesh.setMatrixAt(this.i, this.m);
+        this.i = (this.i + 1) % this.max;
+        this.mesh.count = Math.max(this.mesh.count, this.i === 0 ? this.max : this.i);
+        this.mesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+    this.prev.set(key, { x, z });
+  }
+  clear() { this.mesh.count = 0; this.i = 0; this.prev.clear(); }
+}
+
 class Game {
   constructor() {
     this.canvas = $('gl');
@@ -72,9 +104,11 @@ class Game {
     this.env = setupScene(this.scene, this.renderer);
     this.post = createComposer(this.renderer, this.scene, this.camera);
     this.world = new World(this.scene);
+    Vehicle.groundAt = (x, z) => (this.world.onRoad(x, z) ? 0 : CURB_H);
     this.traffic = new Traffic(this.scene, this.world);
     this.audio = new Audio();
     this.particles = new Particles(this.scene);
+    this.skids = new SkidMarks(this.scene);
     this.police = new Police(this.scene, this.world, {
       radio: (t) => this.radio(t), sfx: (n) => this.audio.sfx(n), flash: () => { this.flash = 1; this.audio.whoosh(); },
       toast: (t) => this.hud.toast(t), onStart: () => { this.save.stats.pursuits++; },
@@ -107,7 +141,7 @@ class Game {
   makePlayer() {
     if (this.player) this.scene.remove(this.player.mesh);
     const g = this.carEntry(), c = CARS[g.id];
-    const mesh = buildCar({ style: c.style, color: g.color });
+    const mesh = buildCar({ style: c.style, color: g.color, ownTail: true });
     // nitrous flames
     const flame = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.1, 8), new THREE.MeshBasicMaterial({ color: 0x70a0ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending }));
     flame.rotation.x = -Math.PI / 2;
@@ -274,6 +308,7 @@ class Game {
   }
   startRoam() {
     this.mode = 'roam';
+    this.skids.clear();
     this.makePlayer();
     this.player.place(this.safehouse.x + 24, this.safehouse.z + 2.75, Math.PI / 2);
     this.player.nitro = 1;
@@ -307,6 +342,7 @@ class Game {
     this.police.reset();
     this.duel = duel;
     this.mode = 'race'; this.sbActive = false;
+    this.skids.clear();
     this.makePlayer();
     this.player.nitro = 1; this.player.flat = false; this.player.blown = false;
     this.player.manual = ev.type === 'drag'; this.player.gear = 0;
@@ -502,6 +538,7 @@ class Game {
       if (imp <= 0) continue;
       if (v === p) {
         if (imp > 4) { this.audio.impact(imp); this.shake = Math.min(1, this.shake + imp * 0.03); }
+        if (imp > 7) this.sparks(p.pos.x + Math.sin(p.heading) * 2, p.pos.z + Math.cos(p.heading) * 2, imp);
         if (imp > 10 && pol.active && pol.p.seen) { pol.addInfraction('property'); pol.addCost(800); }
       } else if (v.kind === 'cop' && imp > 13) pol.damage(v, (imp - 11) * 0.05, false);
     }
@@ -531,6 +568,7 @@ class Game {
     }
     if (a === p) {
       if (imp > 3) { this.audio.impact(imp); this.shake = Math.min(1, this.shake + imp * 0.04); }
+      if (imp > 6) this.sparks((p.pos.x + b.pos.x) / 2, (p.pos.z + b.pos.z) / 2, imp);
       if (b.kind === 'cop') {
         ev.hitCop = b;
         const ratio = Math.min(2, (p.mass * p.massMul) / b.mass);
@@ -609,14 +647,15 @@ class Game {
     const ud = p.mesh.userData;
     ud.flames.visible = p.nitroOn;
     if (p.nitroOn) for (const f of ud.flames.children) f.scale.set(1, 0.7 + Math.random() * 0.6, 1);
-    for (const tl of ud.tail) tl.material.emissiveIntensity = p.input.brake > 0 && p.vLong > 0.5 ? 3 : 0.8;
+    ud.setBrake(p.input.brake > 0 && p.vLong > 0.5);
     this.traffic.sync(alpha);
     this.police.sync(this.renderTime, alpha);
     if (this.race) this.race.sync(this.renderTime, alpha);
     if (playing) this.emitParticles(simDt);
     this.particles.update(simDt);
     this.updateCamera(dt);
-    this.env.follow(this.camera.position);
+    this.env.follow(this.camera.position, now / 1000);
+    this.world.updateWater(now / 1000);
     this.safehouseMesh.visible = this.mode === 'roam' && !this.police.active;
     for (const m of this.markerMeshes) m.visible = !this.police.active;
     // post uniforms
@@ -640,6 +679,17 @@ class Game {
 
   emitParticles(dt) {
     const p = this.player;
+    const skid = (v, id) => {
+      const sliding = (v.slip > 3.2 && v.speed > 6) || (v.input.brake > 0.5 && v.vLong > 12 && v.kind === 'player') || (v.input.handbrake && v.speed > 6);
+      const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
+      for (const sx of [-0.78, 0.78]) {
+        const x = v.mesh.position.x - fx * 1.3 - fz * sx, z = v.mesh.position.z - fz * 1.3 + fx * sx;
+        this.skids.mark(id + sx, x, v.mesh.position.y, z, sliding);
+      }
+    };
+    skid(p, 'p');
+    if (this.race) this.race.colliders().forEach((v, k) => { if (v.kind === 'racer') skid(v, 'r' + k); });
+    for (const u of this.police.units) skid(u, 'c' + u.id);
     const fx = Math.sin(p.heading), fz = Math.cos(p.heading), rx = -fz, rz = fx;
     const smokeOf = (v, intensity) => {
       for (const s of [-0.8, 0.8]) if (Math.random() < intensity) {
@@ -651,6 +701,11 @@ class Game {
     if (p.flat && p.speed > 5 && Math.random() < 0.5) this.particles.emit(p.pos.x - fx * 1.4, 0.2, p.pos.z - fz * 1.4, 0, 0.3, 0, 0.25, 0.5, [1, 0.8, 0.3], 0);
     for (const v of this.race ? this.race.colliders() : []) if (v.kind === 'racer' && v.slip > 5 && v.speed > 8) smokeOf(v, 0.4);
     for (const u of this.police.units) if (u.wrecked && Math.random() < dt * 14) this.particles.emit(u.pos.x, 1.2, u.pos.z, (Math.random() - 0.5), 2.5, (Math.random() - 0.5), 3, 2.2, [0.25, 0.23, 0.22], 2.5);
+  }
+
+  sparks(x, z, imp) {
+    const n = Math.min(24, 4 + imp);
+    for (let k = 0; k < n; k++) this.particles.emit(x, 0.6, z, (Math.random() - 0.5) * 14, 2 + Math.random() * 5, (Math.random() - 0.5) * 14, 0.35 + Math.random() * 0.3, 0.22, [1.6, 1.0, 0.4], -0.6);
   }
 
   updateCamera(dt) {

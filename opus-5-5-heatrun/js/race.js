@@ -59,9 +59,9 @@ export class Race {
     if (ev.type === 'tollbooth') {
       // required average speed scales with the player's own car and the event tier
       const top = this.game.player?.spec.top || 60;
-      const v = top * (0.46 + 0.18 * ev.tier);
+      const v = top * (0.4 + 0.16 * ev.tier);
       this.timeLeft = this.cum[0] / v + 7; // standing start
-      this.segTime = wps.map((w, k) => (k === 0 ? 0 : (this.cum[k] - this.cum[k - 1]) / v + 1));
+      this.segTime = wps.map((w, k) => (k === 0 ? 0 : (this.cum[k] - this.cum[k - 1]) / v + 1.5));
     }
     // checkpoint beacon
     const beamMat = new THREE.MeshBasicMaterial({ color: 0xffc040, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });

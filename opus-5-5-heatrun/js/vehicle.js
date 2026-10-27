@@ -7,6 +7,7 @@ const GEAR_MUL = [1.0, 0.86, 0.74, 0.64, 0.56, 0.5];
 const REDLINE = 8000, IDLE = 900;
 
 export class Vehicle {
+  static groundAt = null; // (x, z) => surface height under a car, set by the game
   // spec: {top (m/s), accel (m/s^2), grip, steer, brake, mass, nitro}
   constructor(spec, mesh, kind = 'racer') {
     this.spec = { ...spec };
@@ -136,6 +137,10 @@ export class Vehicle {
       this.mesh.position.set(this.ppx + (this.pos.x - this.ppx) * alpha, 0, this.ppz + (this.pos.z - this.ppz) * alpha);
       this.mesh.rotation.y = this.ph + wrapAngle(this.heading - this.ph) * alpha;
     }
+    // ride up onto kerbs, sidewalks and parks
+    const gy = Vehicle.groundAt ? Vehicle.groundAt(this.mesh.position.x, this.mesh.position.z) : 0;
+    this.gy = this.gy === undefined ? gy : this.gy + (gy - this.gy) * 0.35;
+    this.mesh.position.y = this.gy;
     const ud = this.mesh.userData;
     if (ud.body) { ud.body.rotation.z = this.roll; ud.body.rotation.x = this.pitch; ud.body.position.y = this.flat ? -0.12 : 0; }
     if (ud.wheels) for (const w of ud.wheels) {

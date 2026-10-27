@@ -525,8 +525,6 @@ export class Police {
       lb.L.material = active ? LIGHTBAR.red : LIGHTBAR.dimRed;
       lb.R.material = active ? LIGHTBAR.blue : LIGHTBAR.dimBlue;
     }
-    const ph = Math.floor(t * 8) % 4;
-    LIGHTBAR.red.emissiveIntensity = ph < 2 ? 4 : 0.2;
-    LIGHTBAR.blue.emissiveIntensity = ph >= 2 ? 4 : 0.2;
+    LIGHTBAR.setPhase(Math.floor(t * 8) % 4 < 2);
   }
 }
