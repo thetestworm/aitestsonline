@@ -125,6 +125,7 @@ class Music {
     if (!on || mode === 'off') return;
     const bpm = mode === 'pursuit' ? 148 : mode === 'race' ? 132 : mode === 'menu' ? 92 : 104;
     const dt = 60 / bpm / 4;
+    if (this.next < this.c.currentTime - 0.1) this.next = this.c.currentTime + 0.05; // skip, don't burst, after a stall
     while (this.next < this.c.currentTime + 0.15) { this.play(this.step, this.next, mode); this.step = (this.step + 1) % 64; this.next += dt; }
   }
   play(s, t, mode) {

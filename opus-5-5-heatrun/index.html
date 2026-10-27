@@ -51,6 +51,10 @@ button{font-family:Oswald,sans-serif;cursor:pointer}
 #b-cost{font:600 20px Oswald;color:var(--ink);line-height:1.1}
 #b-extra{margin-top:6px;font:500 14px Oswald;color:var(--ink);letter-spacing:1px}
 #b-extra span{color:var(--amber2)}
+#ms-track{margin-top:8px;font:500 14px 'Barlow Condensed';color:var(--dim)}
+#ms-track div::before{content:'○ '}
+#ms-track div.ok{color:var(--green)}
+#ms-track div.ok::before{content:'● '}
 
 #pursuit{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);width:min(520px,46vw);opacity:0;transition:opacity .3s}
 #pursuit.show{opacity:1}
@@ -116,7 +120,7 @@ button{font-family:Oswald,sans-serif;cursor:pointer}
 .m-tabs button{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid rgba(255,255,255,.12);padding:8px 18px;font:600 15px Oswald;letter-spacing:2px}
 .m-tabs button.on{background:var(--amber);color:#1a0e04}
 .m-tabs .go{margin-left:auto;background:#2a5a2a;border-color:#4ad06a}
-.m-body{flex:1;min-height:0}
+.m-body{flex:1;min-height:0;overflow:auto}
 .m-foot{margin-top:12px;color:var(--dim);font:500 15px 'Barlow Condensed'}
 .m-foot b{color:var(--ink)}
 h2{font:700 30px Oswald;letter-spacing:2px}
@@ -205,6 +209,7 @@ h1.win{color:var(--amber2)} h1.lose{color:var(--red)}
 .card .front b{display:block;font:700 20px Oswald;letter-spacing:1px}
 .card .front span{font:500 15px 'Barlow Condensed'}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#140e08;z-index:20;font:600 20px Oswald;letter-spacing:6px;color:var(--amber)}
+@media (max-width:1100px){#pursuit{width:34vw;bottom:96px}}
 @media (max-width:820px){#speedo{transform:scale(.7);transform-origin:right bottom}#radar{transform:scale(.7);transform-origin:left bottom}.career{flex-direction:column}.rv-list{width:100%}.perf{flex-direction:column}}
 </style>
 </head>
@@ -213,7 +218,7 @@ h1.win{color:var(--amber2)} h1.lose{color:var(--red)}
 <div id="hud" style="display:none">
   <div id="raceinfo"></div>
   <div id="bounty-box"><label id="b-label1">BOUNTY</label><div id="b-bounty">0</div><label id="b-label2">CASH</label><div id="b-cost">$0</div>
-    <div id="b-extra">UNITS <span id="b-units">0</span> · DOWN <span id="b-immob">0</span> · <span id="b-time">0:00</span></div></div>
+    <div id="b-extra">UNITS <span id="b-units">0</span> · DOWN <span id="b-immob">0</span> · <span id="b-time">0:00</span></div><div id="ms-track"></div></div>
   <div id="district"></div>
   <div id="toasts"></div>
   <div id="banner"></div>

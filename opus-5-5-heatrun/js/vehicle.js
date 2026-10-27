@@ -35,11 +35,14 @@ export class Vehicle {
   get vLong() { return this.vx * this.fwdX + this.vz * this.fwdZ; }
   place(x, z, heading) {
     this.pos.set(x, 0, z); this.heading = heading; this.vx = this.vz = 0; this.yawRate = 0;
-    this.sync(0);
+    this.savePrev();
+    this.sync();
   }
   gearTop(g) { return this.spec.top * GEAR_FRAC[g]; }
 
+  savePrev() { this.ppx = this.pos.x; this.ppz = this.pos.z; this.ph = this.heading; }
   update(dt) {
+    this.savePrev();
     const s = this.spec, inp = this.input;
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     const rx = -fz, rz = fx;
@@ -59,10 +62,14 @@ export class Vehicle {
     this.steerAng = smooth(this.steerAng, inp.steer * maxA * s.steer, 9, dt);
     const drifting = inp.handbrake && spd > 8;
     let yawTarget = -(vLong * Math.tan(this.steerAng)) / 2.6;
-    if (drifting) yawTarget *= 1.55;
-    const yawResp = drifting ? 3.5 : 9 * s.grip / 9;
+    // tyres can only deliver so much lateral acceleration: cap yaw rate by speed
+    const latMax = (21 * s.grip) / 9 * (drifting ? 2.2 : 1) * (this.flat ? 0.6 : 1);
+    const yawCap = latMax / Math.max(6, spd);
+    yawTarget = clamp(yawTarget, -yawCap, yawCap);
+    let yawResp = drifting ? 3.5 : 8 * s.grip / 9;
+    // counter-steer assist: steering against the rotation catches a slide quickly
+    if (Math.sign(yawTarget) !== Math.sign(this.yawRate) && Math.abs(vLat) > 2.5) yawResp *= 2;
     this.yawRate = smooth(this.yawRate, yawTarget, yawResp, dt);
-    // counter-steer assist: when sliding and steering into the slide, damp the spin
     this.heading = wrapAngle(this.heading + this.yawRate * dt);
 
     // --- gearbox
@@ -99,6 +106,7 @@ export class Vehicle {
     a -= drag;
     if (inp.handbrake) a -= Math.sign(vLong) * 3.5;
     if (this.flat) a -= Math.sign(vLong) * 2;
+    a -= Math.sign(vLong) * Math.min(6, Math.abs(vLat) * 0.3); // sliding scrubs speed
     if (inp.throttle === 0 && inp.brake === 0 && Math.abs(vLong) < 0.3) vLong = 0;
     vLong += a * dt;
 
@@ -118,10 +126,16 @@ export class Vehicle {
     this.pitch = smooth(this.pitch, clamp(-a * 0.004, -0.05, 0.05), 6, dt);
   }
 
-  sync() {
+  // alpha interpolates between the previous and current fixed steps
+  sync(alpha = 1) {
     if (!this.mesh) return;
-    this.mesh.position.set(this.pos.x, 0, this.pos.z);
-    this.mesh.rotation.y = this.heading;
+    if (this.ppx === undefined || alpha >= 1) {
+      this.mesh.position.set(this.pos.x, 0, this.pos.z);
+      this.mesh.rotation.y = this.heading;
+    } else {
+      this.mesh.position.set(this.ppx + (this.pos.x - this.ppx) * alpha, 0, this.ppz + (this.pos.z - this.ppz) * alpha);
+      this.mesh.rotation.y = this.ph + wrapAngle(this.heading - this.ph) * alpha;
+    }
     const ud = this.mesh.userData;
     if (ud.body) { ud.body.rotation.z = this.roll; ud.body.rotation.x = this.pitch; ud.body.position.y = this.flat ? -0.12 : 0; }
     if (ud.wheels) for (const w of ud.wheels) {

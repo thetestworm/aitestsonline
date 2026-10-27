@@ -1,6 +1,6 @@
 // Civilian traffic: kinematic lane-following until hit, then free physics.
 import * as THREE from 'three';
-import { N, ROAD_W, LANE_IN, LANE_OUT, nodePos, nodeId } from './world.js';
+import { N, ROAD_W, LANE_IN, LANE_OUT, nodePos } from './world.js';
 import { buildCar } from './carmesh.js';
 import { Vehicle } from './vehicle.js';
 
@@ -96,7 +96,7 @@ export class Traffic {
     tr.phase = 'turn'; tr.s = 0;
   }
 
-  update(dt, player, others, speedFactor = 1) {
+  update(dt, player, others) {
     const all = this.cars;
     for (const v of all) {
       v.age += dt;
@@ -107,8 +107,9 @@ export class Traffic {
         continue;
       }
       const tr = v.tr;
+      v.savePrev();
       // look ahead for cars in the way
-      let want = tr.cruise * speedFactor;
+      let want = tr.cruise;
       const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
       const check = (o) => {
         if (o === v) return;
@@ -135,12 +136,7 @@ export class Traffic {
       this.place(v);
     }
   }
-  // Called when something hits a traffic car hard: it becomes a physics body.
-  knock(v) {
-    if (v.free) return;
-    v.free = true;
-  }
-  sync() { for (const v of this.cars) v.sync(); }
+  sync(alpha) { for (const v of this.cars) v.sync(alpha); }
 
   manage(px, pz, playerSpeed) {
     // recycle distant or long-dead cars, keep density around the player

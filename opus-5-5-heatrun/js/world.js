@@ -416,12 +416,13 @@ export class World {
     for (let i = 0; i < N - 1; i++) for (let j = 0; j < N - 1; j++) {
       const x0 = lineAt(i) + ROAD_W / 2, x1 = lineAt(i + 1) - ROAD_W / 2;
       const z0 = lineAt(j) + ROAD_W / 2, z1 = lineAt(j + 1) - ROAD_W / 2;
-      quads.walk.push([x0, z0, x1, z1, 0.02, 0.25]);
+      quads.walk.push([x0, z0, x1, z1, 0.03, 0.25]);
       const d = districtOf((x0 + x1) / 2, (z0 + z1) / 2);
       const kind = d === 'heights' ? 'grass' : d === 'port' ? 'gravel' : 'concrete';
-      quads[kind].push([x0 + WALK, z0 + WALK, x1 - WALK, z1 - WALK, 0.04, 0.08]);
+      quads[kind].push([x0 + WALK, z0 + WALK, x1 - WALK, z1 - WALK, 0.07, 0.08]);
     }
     for (const k in quads) {
+      mats[k].polygonOffset = true; mats[k].polygonOffsetFactor = k === 'walk' ? -1 : -2; mats[k].polygonOffsetUnits = k === 'walk' ? -1 : -2;
       const mesh = new THREE.Mesh(quadGeo(quads[k]), mats[k]);
       mesh.receiveShadow = true;
       this.group.add(mesh);
@@ -456,6 +457,7 @@ export class World {
     roads.receiveShadow = true;
     const inter = new THREE.Mesh(quadGeo(xs), new THREE.MeshLambertMaterial({ map: crossTexture() }));
     inter.receiveShadow = true;
+    inter.material.polygonOffset = true; inter.material.polygonOffsetFactor = -0.5; inter.material.polygonOffsetUnits = -0.5;
     this.group.add(roads, inter);
   }
 
@@ -523,8 +525,8 @@ export class World {
     spots.forEach(([a, b, axis], k) => {
       // A breaker sits on the sidewalk halfway along a road segment, falls across it.
       const roadLine = lineAt(a), mid = lineAt(b) + SP / 2;
-      const x = axis === 'z' ? roadLine + ROAD_W / 2 + 6 : mid;
-      const z = axis === 'z' ? mid : roadLine + ROAD_W / 2 + 6;
+      const x = axis === 'z' ? roadLine + ROAD_W / 2 + 2.5 : mid;
+      const z = axis === 'z' ? mid : roadLine + ROAD_W / 2 + 2.5;
       const pivot = new THREE.Group();
       pivot.position.set(x, 0, z);
       const body = new THREE.Group();
@@ -557,7 +559,9 @@ export class World {
       const box = axis === 'z'
         ? { x0: roadLine - ROAD_W / 2, x1: roadLine + ROAD_W / 2, z0: mid - 4, z1: mid + 4, h: 4 }
         : { x0: mid - 4, x1: mid + 4, z0: roadLine - ROAD_W / 2, z1: roadLine + ROAD_W / 2, h: 4 };
-      this.breakers.push({ x, z, rx: axis === 'z' ? roadLine : mid, rz: axis === 'z' ? mid : roadLine, axis, pivot, body, box, state: 'ready', t: 0 });
+      // trigger zone: the breaker-side half of the road next to it
+      const tx = axis === 'z' ? roadLine + LANE_OUT : mid, tz = axis === 'z' ? mid : roadLine + LANE_OUT;
+      this.breakers.push({ x, z, tx, tz, rx: axis === 'z' ? roadLine : mid, rz: axis === 'z' ? mid : roadLine, axis, pivot, body, box, state: 'ready', t: 0 });
     });
   }
 
@@ -570,8 +574,12 @@ export class World {
         if (k >= 1) { b.state = 'down'; b.t = 0; this.dynamicBoxes.push(b.box); }
       } else if (b.state === 'down') {
         b.t += dt;
-        if (b.t > 25 && this.dynamicBoxes.includes(b.box)) this.dynamicBoxes.splice(this.dynamicBoxes.indexOf(b.box), 1);
-        if (b.t > 120) { b.state = 'ready'; b.body.rotation.x = 0; }
+        if (b.t > 25 && this.dynamicBoxes.includes(b.box)) {
+          // debris is cleared: hide the wreck together with its collider
+          this.dynamicBoxes.splice(this.dynamicBoxes.indexOf(b.box), 1);
+          b.body.visible = false;
+        }
+        if (b.t > 120) { b.state = 'ready'; b.body.rotation.x = 0; b.body.visible = true; }
       }
     }
   }

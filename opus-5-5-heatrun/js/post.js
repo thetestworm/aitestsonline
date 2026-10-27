@@ -23,12 +23,16 @@ const GradeShader = {
       vec2 c = vUv - 0.5;
       float r = length(c);
       float amt = uSpeed * 0.05 * smoothstep(0.12, 0.55, r);
-      vec3 col = vec3(0.0);
-      for (int i = 0; i < 8; i++) {
-        float t = float(i) / 7.0;
-        col += texture2D(tDiffuse, 0.5 + c * (1.0 - amt * t)).rgb;
+      vec3 col;
+      if (uSpeed < 0.01) col = texture2D(tDiffuse, vUv).rgb;
+      else {
+        col = vec3(0.0);
+        for (int i = 0; i < 8; i++) {
+          float t = float(i) / 7.0;
+          col += texture2D(tDiffuse, 0.5 + c * (1.0 - amt * t)).rgb;
+        }
+        col /= 8.0;
       }
-      col /= 8.0;
       // warm, slightly bleached grade: lifted browns, amber highlights, muted greens
       float l = dot(col, vec3(0.299, 0.587, 0.114));
       vec3 sepia = vec3(l * 1.07 + 0.03, l * 0.93 + 0.015, l * 0.70);

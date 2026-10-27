@@ -1,6 +1,6 @@
 // Safehouse menus: career board (The Fifteen), garage, performance shop,
 // rap sheet and settings, plus post-event screens.
-import { CARS, UPGRADES, upgradeCost, carSpec, perfRating, RIVALS, RIVAL_EVENTS, RIVAL_MILESTONES, DUELS, MS_TYPES, TYPE_NAMES, rivalStatus, UNLOCK_AFTER, writeSave, clearSave, newSave } from './career.js';
+import { CARS, UPGRADES, upgradeCost, carSpec, perfRating, RIVALS, RIVAL_EVENTS, RIVAL_MILESTONES, DUELS, MS_TYPES, TYPE_NAMES, rivalStatus, clearSave, newSave } from './career.js';
 import { fmtMoney, fmtTime, MPH } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -83,7 +83,8 @@ export class Menu {
       const c = CARS[g.id], sp = carSpec(g);
       return `<div class="car ${k === s.current ? 'sel' : ''}"><div class="sw" style="background:${hex(g.color)}"></div><b>${esc(c.name)}</b><span>Tier ${c.tier} · Rating ${perfRating(sp)} · Heat ${g.heat} · Strikes ${g.strikes}/3</span>${k === s.current ? '<em>DRIVING</em>' : `<button data-act="usecar" data-i="${k}">DRIVE</button>`}</div>`;
     }).join('');
-    const forSale = Object.entries(CARS).filter(([id]) => s.unlocked.includes(id)).map(([id, c]) => {
+    const owned_ = new Set(s.garage.map((g) => g.id));
+    const forSale = Object.entries(CARS).filter(([id]) => s.unlocked.includes(id) && !owned_.has(id)).map(([id, c]) => {
       const sp = carSpec({ id, up: {} });
       return `<div class="car"><div class="sw" style="background:${hex(c.color)}"></div><b>${esc(c.name)}</b><span>Tier ${c.tier} · Top ${Math.round(sp.top * MPH)} mph · Rating ${perfRating(sp)}</span><button data-act="buy" data-id="${id}" class="${s.cash < c.price ? 'disabled' : ''}">BUY ${fmtMoney(c.price)}</button></div>`;
     }).join('');
@@ -103,7 +104,7 @@ export class Menu {
     return `<div class="perf"><div class="perf-l"><h2>${esc(c.name)}</h2>
       ${stat('TOP SPEED', sp.top, 100)}${stat('ACCELERATION', sp.accel, 16)}${stat('HANDLING', sp.grip, 13)}${stat('BRAKING', sp.brake, 40)}${stat('NITROUS', sp.nitroDur, 7)}
       <p>Top speed ≈ ${Math.round(sp.top * MPH)} mph · Rating ${perfRating(sp)}</p>
-      <h3>PAINT SHOP <span>${fmtMoney(1500)} · lowers heat by 1</span></h3>
+      <h3>PAINT SHOP <span>${fmtMoney(1500)}${g.heat > 1 ? ' · lowers heat by 1' : ''}</span></h3>
       <div class="paints">${PAINTS.map((p) => `<button data-act="paint" data-c="${p}" style="background:${hex(p)}" class="${p === g.color ? 'sel' : ''}"></button>`).join('')}</div>
       </div><div class="perf-r">${rows}</div></div>`;
   }

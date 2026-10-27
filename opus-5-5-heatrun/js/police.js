@@ -1,8 +1,8 @@
 // Police: patrols, pursuits, heat, roadblocks, spike strips, helicopter,
 // evade/cooldown, busted meter, bounty, infractions and dispatch chatter.
 import * as THREE from 'three';
-import { N, SP, ROAD_W, LANE_IN, nodePos, nodeId, lineAt, HALF } from './world.js';
-import { buildCar, buildHeli, buildSpikeStrip } from './carmesh.js';
+import { N, SP, ROAD_W, LANE_IN, nodePos, lineAt, HALF } from './world.js';
+import { buildCar, buildHeli, buildSpikeStrip, LIGHTBAR, disposeGeometry } from './carmesh.js';
 import { Vehicle, driveTo } from './vehicle.js';
 import { clamp, wrapAngle } from './util.js';
 
@@ -22,7 +22,7 @@ const HEAT = [
   { units: 7, mix: ['interceptor', 'heavy', 'undercover', 'interceptor', 'cruiser'], rb: 18, spikes: true, heli: true, speed: 1.06 },
 ];
 const HEAT_TIME = [0, 0, 45, 110, 190, 290];   // pursuit seconds to reach heat N
-const HEAT_BOUNTY = [0, 0, 6000, 18000, 40000, 80000];
+const HEAT_BOUNTY = [0, 0, 10000, 30000, 70000, 140000];
 
 export const INFRACTIONS = {
   speeding: 'Speeding', reckless: 'Reckless driving', ramming: 'Ramming a police vehicle',
@@ -59,7 +59,7 @@ export class Police {
     for (const u of this.units) this.scene.remove(u.mesh);
     for (const rb of this.roadblocks) this.removeRoadblock(rb);
     this.units = []; this.roadblocks = [];
-    if (this.heli) { this.scene.remove(this.heli.mesh); this.heli = null; }
+    if (this.heli) { this.scene.remove(this.heli.mesh); disposeGeometry(this.heli.mesh); this.heli = null; }
     this.state = 'none';  // none | pursuit | cooldown
     this.p = null;
     this.radioCd = 0;
@@ -91,6 +91,7 @@ export class Police {
   // ---------- pursuit lifecycle ----------
   startPursuit(player, carHeat, reason) {
     if (this.state !== 'none') return;
+    if (this.heli) { this.scene.remove(this.heli.mesh); disposeGeometry(this.heli.mesh); this.heli = null; }
     this.state = 'pursuit';
     this.p = {
       t: 0, heat: Math.max(1, carHeat), bounty: 0, cost: 0, immob: 0, involved: 0, damaged: 0,
@@ -119,7 +120,6 @@ export class Police {
     this.hooks.flash();
     this.hooks.toast(`HEAT LEVEL ${p.heat}`);
     this.radio('heat', {}, true);
-    if (p.heat >= 3 && !p.rbT) p.rbT = 10;
   }
 
   endPursuit(result) {
@@ -216,7 +216,7 @@ export class Police {
     return true;
   }
   removeRoadblock(rb) {
-    if (rb.spikes) this.scene.remove(rb.spikes);
+    if (rb.spikes) { this.scene.remove(rb.spikes); disposeGeometry(rb.spikes); rb.spikes = null; }
     for (const u of rb.cars) if (u.mode === 'roadblock') { u.mode = 'leave'; u.leaveT = 0; }
   }
 
@@ -283,7 +283,7 @@ export class Police {
       if (seen) { p.evade = Math.max(0, p.evade - dt * 1.5); p.unseenT = 0; }
       else {
         p.unseenT += dt;
-        if (nearest > 45) p.evade = Math.min(1, p.evade + dt / 7);
+        if (nearest > 80) p.evade = Math.min(1, p.evade + dt / 7);
         if (p.unseenT > 1.5 && p.evade < 0.05) this.radio('lost', { d: dirName(player.vx, player.vz) });
       }
       if (p.evade >= 1) {
@@ -323,7 +323,7 @@ export class Police {
         this.radio('spotted', {}, true);
         this.hooks.toast('SPOTTED');
       } else {
-        const dur = 18 + p.heat * 7;
+        const dur = 14 + p.heat * 5;
         p.cooldown += (dt / dur) * (hiding ? 3 : 1);
         if (p.cooldown >= 1) { ctx.onEvaded(); return; }
       }
@@ -351,7 +351,11 @@ export class Police {
           this.hooks.toast('ROADBLOCK EVADED');
           this.radio('rbEvaded', {}, true);
         }
-        for (const u of rb.cars) if (!u.wrecked) setTimeout(() => { if (u.mode === 'roadblock') { u.mode = 'chase'; u.massMul = 1; } }, 1200);
+        rb.releaseT = 1.2;
+      }
+      if (rb.releaseT !== undefined && (rb.releaseT -= dt) <= 0) {
+        rb.releaseT = undefined;
+        for (const u of rb.cars) if (!u.wrecked && u.mode === 'roadblock') { u.mode = 'chase'; u.massMul = 1; }
       }
       const dist = Math.hypot(player.pos.x - rb.x, player.pos.z - rb.z);
       if ((rb.passed && dist > 250) || (!rb.passed && rel < -700) || rb.t > 70) {
@@ -378,7 +382,7 @@ export class Police {
     m.userData.rotor.rotation.y += dt * 30;
     m.userData.trotor.rotation.x += dt * 40;
     m.userData.cone.visible = !h.leaving;
-    if (h.leaving && Math.hypot(h.x - player.pos.x, h.z - player.pos.z) > 900) { this.scene.remove(m); this.heli = null; }
+    if (h.leaving && Math.hypot(h.x - player.pos.x, h.z - player.pos.z) > 900) { this.scene.remove(m); disposeGeometry(m); this.heli = null; }
   }
 
   // ---------- AI ----------
@@ -387,7 +391,8 @@ export class Police {
     const H = this.p ? HEAT[this.p.heat] : HEAT[1];
     const scale = H.speed;
     // rubber band: pursuers keep up with fast player cars
-    u.spec.top = Math.max(u.def.top, (player.spec.top || 60) * scale) * (u.type === 'heavy' ? 0.92 : 1);
+    const pTop = (player.spec.top || 60) * (player.flat ? 0.6 : 1);
+    u.spec.top = Math.max(u.def.top * (player.flat ? 0.75 : 1), pTop * scale) * (u.type === 'heavy' ? 0.92 : 1);
     u.spec.accel = Math.max(u.def.accel, (player.spec.accel || 9) * scale);
     const dpx = player.pos.x - u.pos.x, dpz = player.pos.z - u.pos.z, d = Math.hypot(dpx, dpz);
     if (u.mode === 'roadblock') { u.input.throttle = 0; u.input.brake = 1; u.input.steer = 0; u.input.handbrake = true; return; }
@@ -402,8 +407,9 @@ export class Police {
           const side = ((u.id % 2) ? 1 : -1) * 2.4;
           tx += -Math.cos(player.heading) * side; tz += Math.sin(player.heading) * side;
         }
-        const want = Math.max(20, player.speed + 8 + d * 0.25);
-        driveTo(u, tx, tz, Math.min(u.spec.top, want), { dt, nitro: d > 60 });
+        // close fast from range, then match the player's speed instead of plowing in
+        const want = d > 30 ? player.speed + 6 + d * 0.2 : player.speed + clamp((d - 6) * 0.6, -4, 8);
+        driveTo(u, tx, tz, clamp(want, 6, u.spec.top), { dt, nitro: d > 60 });
         if (player.speed < 4 && d < 10) { u.input.throttle = 0.3; u.input.brake = 0.5; } // hold the box
         u.path = [];
         return;
@@ -473,7 +479,8 @@ export class Police {
   wreck(u) {
     if (u.wrecked) return;
     u.wrecked = true; u.mode = 'wreck';
-    u.mesh.userData.lightbar && (u.mesh.userData.lightbar.red.emissiveIntensity = 0, u.mesh.userData.lightbar.blue.emissiveIntensity = 0);
+    const lb = u.mesh.userData.lightbar;
+    if (lb) { lb.L.material = LIGHTBAR.off; lb.R.material = LIGHTBAR.off; }
     u.mesh.userData.smoke = true;
     if (this.p) {
       this.p.immob++; this.p.bounty += 1000 * this.p.heat; this.p.cost += u.def.cost;
@@ -509,17 +516,17 @@ export class Police {
     return null;
   }
 
-  sync(t) {
+  sync(t, alpha) {
     for (const u of this.units) {
-      u.sync();
+      u.sync(alpha);
       const lb = u.mesh.userData.lightbar;
-      if (lb && !u.wrecked && u.mode !== 'patrol') {
-        const ph = Math.floor(t * 8) % 4;
-        lb.red.emissiveIntensity = ph < 2 ? 4 : 0.2;
-        lb.blue.emissiveIntensity = ph >= 2 ? 4 : 0.2;
-      } else if (lb && u.mode === 'patrol') { lb.red.emissiveIntensity = 0.3; lb.blue.emissiveIntensity = 0.3; }
+      if (!lb || u.wrecked) continue;
+      const active = u.mode !== 'patrol';
+      lb.L.material = active ? LIGHTBAR.red : LIGHTBAR.dimRed;
+      lb.R.material = active ? LIGHTBAR.blue : LIGHTBAR.dimBlue;
     }
+    const ph = Math.floor(t * 8) % 4;
+    LIGHTBAR.red.emissiveIntensity = ph < 2 ? 4 : 0.2;
+    LIGHTBAR.blue.emissiveIntensity = ph >= 2 ? 4 : 0.2;
   }
-  heatLevel() { return this.p ? this.p.heat : 0; }
-  static heatTable() { return HEAT; }
 }

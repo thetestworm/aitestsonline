@@ -4,7 +4,7 @@ import { N, nodeId } from './world.js';
 
 // Fictional cars. top in m/s, accel in m/s^2.
 export const CARS = {
-  hachi:     { name: 'Ronin Hachi',       style: 'hatch',  tier: 1, price: 0,      top: 54, accel: 8.0,  grip: 8.5,  steer: 1.05, brake: 22, mass: 1150, color: 0xc8c2b4 },
+  hachi:     { name: 'Ronin Hachi',       style: 'hatch',  tier: 1, price: 0,      top: 54, accel: 8.0,  grip: 8.5,  steer: 1.05, brake: 22, mass: 1150, color: 0xb8401c },
   strade:    { name: 'Strade Corsa 3',    style: 'coupe',  tier: 1, price: 16000,  top: 58, accel: 8.6,  grip: 8.8,  steer: 1.0,  brake: 23, mass: 1250, color: 0x2a5aa8 },
   bullet:    { name: 'Kessler Bullet V8', style: 'muscle', tier: 2, price: 38000,  top: 65, accel: 10.4, grip: 7.8,  steer: 0.95, brake: 23, mass: 1600, color: 0xd8a020 },
   volta:     { name: 'Volta GT-X',        style: 'coupe',  tier: 2, price: 52000,  top: 66, accel: 10.0, grip: 9.4,  steer: 1.0,  brake: 25, mass: 1380, color: 0x1f6b48 },
@@ -33,7 +33,7 @@ export function carSpec(entry) {
   const st = (k) => u[k] || 0;
   return {
     top: c.top * (1 + 0.035 * st('engine') + 0.01 * st('trans') + 0.015 * st('turbo')),
-    accel: c.accel * (1 + 0.07 * st('engine') + 0.05 * st('trans') + 0.06 * st('turbo')),
+    accel: 0.82 * c.accel * (1 + 0.07 * st('engine') + 0.05 * st('trans') + 0.06 * st('turbo')),
     grip: c.grip * (1 + 0.05 * st('susp') + 0.06 * st('tires')),
     steer: c.steer * (1 + 0.03 * st('susp')),
     brake: c.brake * (1 + 0.12 * st('brakes')),
@@ -83,14 +83,14 @@ function milestonesFor(idx, count) {
   const r = rng(900 + idx);
   const lvl = idx / 14;
   const pool = [
-    ['length', Math.round(60 + lvl * 300)],
-    ['immob', Math.round(2 + lvl * 14)],
-    ['infractions', Math.min(7, 2 + Math.floor(lvl * 5))],
+    ['length', Math.round(60 + lvl * 180)],
+    ['immob', Math.round(2 + lvl * 10)],
+    ['infractions', Math.min(6, 2 + Math.floor(lvl * 4))],
     ['cost', Math.round((20000 + lvl * 280000) / 1000) * 1000],
     ['bounty', Math.round((3000 + lvl * 60000) / 500) * 500],
   ];
-  if (idx >= 3) pool.push(['roadblocks', Math.round(1 + lvl * 6)]);
-  if (idx >= 6) pool.push(['spikes', Math.round(1 + lvl * 4)]);
+  if (idx >= 3) pool.push(['roadblocks', Math.round(1 + lvl * 4)]);
+  if (idx >= 6) pool.push(['spikes', Math.round(1 + lvl * 2)]);
   if (idx >= 2) pool.push(['breakers', Math.round(1 + lvl * 3)]);
   const out = [];
   while (out.length < count && pool.length) {
@@ -141,7 +141,7 @@ function walkRoute(r, len) {
 function dragRoute(r) {
   const along = r() < 0.5, line = 1 + Math.floor(r() * (N - 2)), start = Math.floor(r() * (N - 7));
   const out = [];
-  for (let k = 0; k <= 6; k++) out.push(along ? nodeId(line, start + k) : nodeId(start + k, line));
+  for (let k = 0; k <= 3; k++) out.push(along ? nodeId(line, start + k) : nodeId(start + k, line));
   return out;
 }
 export function makeEvent(id, type, seed, tier, opts = {}) {
@@ -151,9 +151,9 @@ export function makeEvent(id, type, seed, tier, opts = {}) {
   if (type === 'circuit' || type === 'knockout') { route = loopRoute(r); laps = type === 'knockout' ? 3 : 2; }
   else if (type === 'drag') route = dragRoute(r);
   else route = walkRoute(r, type === 'tollbooth' ? 12 : 10);
-  if (route.length < 5) route = walkRoute(rng(seed + 7), 10);
+  if (route.length < (type === 'drag' ? 4 : 5)) route = walkRoute(rng(seed + 7), 10);
   const opponents = type === 'tollbooth' ? 0 : type === 'drag' ? 1 : 3;
-  const cash = Math.round((1500 + tier * 2600) * (type === 'drag' ? 0.8 : 1) / 100) * 100;
+  const cash = Math.round((2500 + tier * 4200) * (type === 'drag' ? 0.8 : 1) / 100) * 100;
   return { id, type, name, route, laps, opponents, cash, bounty: Math.round(cash * 1.4), tier, seed, ...opts };
 }
 
@@ -187,7 +187,10 @@ export function newSave() {
 export function loadSave() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && s.garage && s.garage.length) return { ...newSave(), ...s };
+    if (s && s.garage && s.garage.length) {
+      const d = newSave();
+      return { ...d, ...s, stats: { ...d.stats, ...s.stats }, settings: { ...d.settings, ...s.settings } };
+    }
   } catch (e) { /* storage unavailable */ }
   return null;
 }

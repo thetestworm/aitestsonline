@@ -6,6 +6,12 @@ import { Vehicle, driveTo } from './vehicle.js';
 import { CARS, carSpec, RIVALS } from './career.js';
 import { clamp, wrapAngle } from './util.js';
 
+// Start point of an event without building the course (for free-roam markers).
+export function raceStart(ev) {
+  const a = nodePos(ev.route[0]), b = nodePos(ev.route[1]);
+  return ev.type === 'drag' ? a : { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+}
+
 const OPP_NAMES = ['Ziggy', 'Moreno', 'Tank', 'Quill', 'Rook', 'Dace', 'Nix', 'Juno', 'Haze', 'Pike', 'Lark', 'Volt'];
 const OPP_COLORS = [0x2050a0, 0xb02a1a, 0xe0c020, 0x208040, 0xe0e0e0, 0x602080, 0xf08020, 0x101010];
 
@@ -51,9 +57,11 @@ export class Race {
     this.lapLen = acc;
     // tollbooth timing
     if (ev.type === 'tollbooth') {
-      const v = 30 + ev.tier * 16;
-      this.timeLeft = this.cum[0] / v + 6;
-      this.segTime = wps.map((w, k) => (k === 0 ? 0 : (this.cum[k] - this.cum[k - 1]) / v + 1.5));
+      // required average speed scales with the player's own car and the event tier
+      const top = this.game.player?.spec.top || 60;
+      const v = top * (0.46 + 0.18 * ev.tier);
+      this.timeLeft = this.cum[0] / v + 7; // standing start
+      this.segTime = wps.map((w, k) => (k === 0 ? 0 : (this.cum[k] - this.cum[k - 1]) / v + 1));
     }
     // checkpoint beacon
     const beamMat = new THREE.MeshBasicMaterial({ color: 0xffc040, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -77,6 +85,7 @@ export class Race {
     for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.5, 9.5, 0.5), new THREE.MeshLambertMaterial({ color: 0x222222 })); p.position.set(s * 12, 4.75, 0); banner.add(p); }
     banner.position.set(fin.x, 0, fin.z); banner.rotation.y = fd;
     this.game.scene.add(banner); this.objects.push(banner);
+    this.owned = [this.beacon, ring, banner]; // course props whose GPU resources die with the race
   }
 
   addRacer(veh, name, isPlayer, color) {
@@ -96,10 +105,9 @@ export class Race {
     const n = ev.opponents;
     // player at the back of the grid (or lane 1 for drag)
     const ps = ev.type === 'drag' ? slots[0] : slots[Math.min(n, slots.length - 1)];
-    const back = ev.type === 'drag' ? 0 : 12;
-    player.place(this.start.x + fx * (ps[1] - back + 12) + rx * ps[0], this.start.z + fz * (ps[1] - back + 12) + rz * ps[0], h);
+    player.place(this.start.x + fx * ps[1] + rx * ps[0], this.start.z + fz * ps[1] + rz * ps[0], h);
     this.player = this.addRacer(player, 'YOU', true, 0xffffff);
-    this.player.lane = ev.type === 'drag' ? 1 : 0;
+    this.player.lane = ev.type === 'drag' ? 2 : 0; // drag slots sit in lanes[2] and lanes[3]
     for (let k = 0; k < n; k++) {
       let spec, style, color, stripe = null, name;
       if (ev.rival !== undefined) {
@@ -121,7 +129,7 @@ export class Race {
       const s = ev.type === 'drag' ? slots[1] : slots[k];
       v.place(this.start.x + fx * s[1] + rx * s[0], this.start.z + fz * s[1] + rz * s[0], h);
       const r = this.addRacer(v, name, false, color);
-      r.lane = 2;
+      r.lane = 3;
       this.objects.push(mesh);
     }
     if (ev.type === 'drag') this.spawnDragTraffic();
@@ -159,7 +167,15 @@ export class Race {
       this.count -= dt;
       if (Math.ceil(this.count) !== before && this.count > 0) this.game.audio.beep(false);
       for (const r of this.racers) { r.veh.hold = true; if (!r.isPlayer) r.veh.input.throttle = 0.3 + Math.random() * 0.5; }
-      if (this.count <= 0) { this.state = 'running'; for (const r of this.racers) r.veh.hold = false; this.game.audio.beep(true); this.game.hud.banner('GO!', 900); }
+      if (this.count <= 0) {
+        this.state = 'running';
+        for (const r of this.racers) r.veh.hold = false;
+        this.game.audio.beep(true); this.game.hud.banner('GO!', 900);
+        // launch: revs held in the sweet spot give a jump, bouncing off the limiter bogs
+        const v = this.player.veh, rpm = v.rpm;
+        if (rpm > 4500 && rpm < 6800) { v.vx += Math.sin(v.heading) * 4; v.vz += Math.cos(v.heading) * 4; this.game.hud.toast('PERFECT LAUNCH'); }
+        else if (rpm >= 7400) { v.shiftTimer = 0.6; this.game.hud.toast('WHEELSPIN'); }
+      }
       return;
     }
     if (this.state !== 'running') return;
@@ -256,7 +272,7 @@ export class Race {
     const d = Math.hypot(w.x - v.pos.x, w.z - v.pos.z);
     // rubber band against the player
     const gap = this.progress(r) - this.progress(this.player);
-    const band = clamp(1 - gap / 1500, 0.86, 1.14);
+    const band = clamp(1 - gap / 2600, 0.92, 1.07);
     v.spec.top = v.baseSpec.top * band; v.spec.accel = v.baseSpec.accel * clamp(band, 0.9, 1.15);
     let want = v.spec.top;
     let tx = w.x, tz = w.z;
@@ -287,6 +303,7 @@ export class Race {
     const lanes = [-LANE_OUT, -LANE_IN, LANE_IN, LANE_OUT];
     for (const v of this.dragTraffic) {
       if (v.free) { v.input.throttle = 0; v.input.brake = 1; v.update(dt); continue; }
+      v.savePrev();
       v.heading = h; v.vx = fx * v.dragSpeed; v.vz = fz * v.dragSpeed;
       v.pos.x += v.vx * dt; v.pos.z += v.vz * dt;
     }
@@ -346,18 +363,19 @@ export class Race {
 
   nextWaypoint() { return this.wps[Math.min(this.player.wp, this.wps.length - 1)]; }
 
-  sync(time) {
+  sync(time, alpha) {
     const w = this.nextWaypoint();
     this.beacon.position.set(w.x, 30, w.z);
     this.beaconRing.position.set(w.x, 0.15, w.z);
     this.beacon.material.color.setHex(w.trap ? 0x40c0ff : w.finish ? 0xffffff : 0xffc040);
     this.beacon.material.opacity = 0.16 + Math.sin(time * 4) * 0.05;
-    for (const r of this.racers) if (!r.isPlayer) r.veh.sync();
-    if (this.dragTraffic) for (const v of this.dragTraffic) v.sync();
+    for (const r of this.racers) if (!r.isPlayer) r.veh.sync(alpha);
+    if (this.dragTraffic) for (const v of this.dragTraffic) v.sync(alpha);
   }
 
   dispose() {
     for (const o of this.objects) this.game.scene.remove(o);
+    for (const o of this.owned) o.traverse((m) => { if (m.isMesh) { m.geometry.dispose(); m.material.map?.dispose(); m.material.dispose(); } });
   }
 }
 

@@ -49,7 +49,17 @@ function extrude(shape, width, bevel) {
   return g;
 }
 
-const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0d10, metalness: 0.2, roughness: 0.05, clearcoat: 1, envMapIntensity: 1.6 });
+const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x3a4652, metalness: 0.85, roughness: 0.08, clearcoat: 1, envMapIntensity: 2.2 });
+const plateMat = new THREE.MeshStandardMaterial({ color: 0xe8e0c8, roughness: 0.5 });
+// Light-bar materials are shared: every active unit flashes in sync, patrols glow dim.
+export const LIGHTBAR = {
+  red: new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff0000, emissiveIntensity: 2 }),
+  blue: new THREE.MeshStandardMaterial({ color: 0x000040, emissive: 0x1040ff, emissiveIntensity: 2 }),
+  dimRed: new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff0000, emissiveIntensity: 0.3 }),
+  dimBlue: new THREE.MeshStandardMaterial({ color: 0x000040, emissive: 0x1040ff, emissiveIntensity: 0.3 }),
+  off: new THREE.MeshStandardMaterial({ color: 0x202020 }),
+};
+const stripeCache = new Map();
 const tireMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.9 });
 const rimMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.9, roughness: 0.3 });
 const darkMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.6 });
@@ -57,7 +67,7 @@ const headMat = new THREE.MeshStandardMaterial({ color: 0xfff2d0, emissive: 0xff
 const tailMat = new THREE.MeshStandardMaterial({ color: 0x5a0000, emissive: 0xff1a10, emissiveIntensity: 0.8 });
 export const paintCache = new Map();
 export function paintMat(hex) {
-  if (!paintCache.has(hex)) paintCache.set(hex, new THREE.MeshPhysicalMaterial({ color: hex, metalness: 0.55, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.08 }));
+  if (!paintCache.has(hex)) paintCache.set(hex, new THREE.MeshPhysicalMaterial({ color: hex, metalness: 0.5, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.4 }));
   return paintCache.get(hex);
 }
 
@@ -91,12 +101,17 @@ export function buildCar(opts) {
     const hl = new THREE.Mesh(cache('hl', () => new THREE.BoxGeometry(0.42, 0.12, 0.08)), headMat);
     hl.position.set(sx * s.W * 0.33, style === 'suv' || style === 'van' || style === 'pickup' ? 0.88 : 0.66, front - 0.04);
     body.add(hl);
-    const tl = new THREE.Mesh(cache('tl', () => new THREE.BoxGeometry(0.5, 0.12, 0.08)), tailMat);
+    const tl = new THREE.Mesh(cache('tl', () => new THREE.BoxGeometry(0.55, 0.16, 0.1)), tailMat);
     tl.position.set(sx * s.W * 0.33, style === 'suv' || style === 'van' || style === 'pickup' ? 1.0 : 0.8, rear - 0.03);
     body.add(tl);
     root.userData.tail = root.userData.tail || [];
     root.userData.tail.push(tl);
   }
+  // rear plate + bumper so the chase view reads as a car, not a slab
+  const plate = new THREE.Mesh(cache('plate', () => new THREE.BoxGeometry(0.52, 0.13, 0.04)), plateMat);
+  plate.position.set(0, 0.5, rear - 0.04); body.add(plate);
+  const bumper = new THREE.Mesh(cache(style + ':bump', () => new THREE.BoxGeometry(s.W * 0.96, 0.16, 0.12)), darkMat);
+  bumper.position.set(0, 0.36, rear - 0.01); body.add(bumper);
   // grille / diffuser
   const grille = new THREE.Mesh(cache(style + ':gr', () => new THREE.BoxGeometry(s.W * 0.5, 0.18, 0.06)), darkMat);
   grille.position.set(0, 0.48, front - 0.02); body.add(grille);
@@ -114,7 +129,8 @@ export function buildCar(opts) {
     sc.position.set(0, 1.03, 1.3); body.add(sc);
   }
   if (opts.stripe) {
-    const smat = new THREE.MeshStandardMaterial({ color: opts.stripe, roughness: 0.4, metalness: 0.3 });
+    if (!stripeCache.has(opts.stripe)) stripeCache.set(opts.stripe, new THREE.MeshStandardMaterial({ color: opts.stripe, roughness: 0.4, metalness: 0.3 }));
+    const smat = stripeCache.get(opts.stripe);
     const st = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.02, s.L * 0.98), smat);
     st.position.set(0, 0.0, 0);
     // stripe follows the hood/roof roughly: put pieces on hood and roof
@@ -132,26 +148,23 @@ export function buildCar(opts) {
     }
     const roofY = Math.max(...s.cab.map((p) => p[1])) + (s.roof ? s.roof[1] : 0);
     const bar = new THREE.Group();
-    const red = new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff0000, emissiveIntensity: 2 });
-    const blue = new THREE.MeshStandardMaterial({ color: 0x000040, emissive: 0x1040ff, emissiveIntensity: 2 });
+    const red = LIGHTBAR.dimRed, blue = LIGHTBAR.dimBlue;
     const base = new THREE.Mesh(cache('barbase', () => new THREE.BoxGeometry(1.3, 0.08, 0.3)), darkMat);
     bar.add(base);
     const L = new THREE.Mesh(cache('barL', () => new THREE.BoxGeometry(0.55, 0.12, 0.26)), red); L.position.set(-0.35, 0.09, 0); bar.add(L);
     const R = new THREE.Mesh(cache('barL', () => new THREE.BoxGeometry(0.55, 0.12, 0.26)), blue); R.position.set(0.35, 0.09, 0); bar.add(R);
     bar.position.set(0, roofY + 0.02, (s.roof ? s.roof[0] : 0) + 0.6);
     body.add(bar);
-    root.userData.lightbar = { red, blue };
+    root.userData.lightbar = { L, R };
     // push bar
     const pb = new THREE.Mesh(cache('pushbar', () => new THREE.BoxGeometry(s.W * 0.7, 0.35, 0.12)), darkMat);
     pb.position.set(0, 0.5, front + 0.08); body.add(pb);
   }
   if (opts.police === 'undercover') {
-    const red = new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff0000, emissiveIntensity: 2 });
-    const blue = new THREE.MeshStandardMaterial({ color: 0x000040, emissive: 0x1040ff, emissiveIntensity: 2 });
-    const a = new THREE.Mesh(cache('dash', () => new THREE.BoxGeometry(0.3, 0.06, 0.06)), red), b = new THREE.Mesh(cache('dash', () => new THREE.BoxGeometry(0.3, 0.06, 0.06)), blue);
+    const a = new THREE.Mesh(cache('dash', () => new THREE.BoxGeometry(0.3, 0.06, 0.06)), LIGHTBAR.dimRed), b = new THREE.Mesh(cache('dash', () => new THREE.BoxGeometry(0.3, 0.06, 0.06)), LIGHTBAR.dimBlue);
     a.position.set(-0.2, 0.62, front - 0.01); b.position.set(0.2, 0.62, front - 0.01);
     body.add(a, b);
-    root.userData.lightbar = { red, blue };
+    root.userData.lightbar = { L: a, R: b };
   }
   // wheels
   root.userData.wheels = [];
@@ -207,4 +220,10 @@ export function buildSpikeStrip(width) {
     const sp = new THREE.Mesh(spikeG, sm); sp.position.set(x, 0.14, 0); g.add(sp);
   }
   return g;
+}
+
+// Free geometry owned by a one-off object (heli, spike strip). Car geometry lives
+// in the shared cache and many materials are shared, so materials are left alone.
+export function disposeGeometry(obj) {
+  obj.traverse((o) => { if (o.isMesh && ![...sharedGeo.values()].includes(o.geometry)) o.geometry.dispose(); });
 }

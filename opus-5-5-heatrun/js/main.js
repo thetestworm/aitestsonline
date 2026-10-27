@@ -1,18 +1,20 @@
 // HEAT RUN: game orchestration — modes, input, simulation step, camera,
 // collisions, career flow and post-event screens.
 import * as THREE from 'three';
-import { World, BOUND, districtOf, DISTRICT_NAMES, nodePos, lineAt, N, SP } from './world.js';
+import { World, BOUND, districtOf, DISTRICT_NAMES, nodePos, lineAt } from './world.js';
 import { buildCar } from './carmesh.js';
 import { Vehicle, collideStatic, collidePair } from './vehicle.js';
 import { Traffic } from './traffic.js';
 import { Police } from './police.js';
-import { Race, ordinal } from './race.js';
+import { Race, raceStart } from './race.js';
 import { Audio } from './audio.js';
 import { HUD } from './hud.js';
 import { Menu, showMarkers } from './menu.js';
 import { createRenderer, setupScene, createComposer } from './post.js';
 import { CARS, carSpec, loadSave, newSave, writeSave, RIVALS, RIVAL_EVENTS, RIVAL_MILESTONES, DUELS, UNLOCK_AFTER, TYPE_NAMES, MS_TYPES } from './career.js';
 import { clamp, smooth, wrapAngle, MPH, fmtMoney, fmtTime } from './util.js';
+
+const _pos = new THREE.Vector3(), _look = new THREE.Vector3();
 
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
@@ -160,12 +162,13 @@ class Game {
       if (e.repeat) return;
       this.keys.add(k);
       if (this.mode === 'title') { if (k === 'Enter' || k === 'Space') this.titleContinue(); return; }
+      if (k === 'Enter' && $('post').classList.contains('show')) { $('post').querySelector('button.big')?.click(); return; }
       if (k === 'Escape' || k === 'KeyP') { if (this.mode === 'roam' || this.mode === 'race') this.togglePause(); return; }
       if (this.paused) return;
       if (this.mode !== 'roam' && this.mode !== 'race') return;
       if (k === 'KeyC') this.camMode = (this.camMode + 1) % 3;
-      if (k === 'KeyR') this.resetCar();
-      if ((k === 'KeyE' || k === 'ControlLeft' || k === 'ControlRight') && !(this.race && this.race.type === 'drag')) this.toggleSB();
+      if (k === 'KeyR') { if (this.police.active) this.hud.toast('CAN\'T RESET DURING A PURSUIT'); else this.resetCar(); }
+      if (k === 'KeyE' || k === 'ControlLeft' || k === 'ControlRight') this.toggleSB();
       if (k === 'Enter') this.interact();
       if (this.race && this.race.type === 'drag') {
         if (k === 'KeyW' || k === 'ArrowUp') this.race.dragShift(true);
@@ -201,8 +204,9 @@ class Game {
       if (pad.buttons[2]?.pressed && !this.padSB) this.toggleSB();
       this.padSB = pad.buttons[2]?.pressed;
     }
-    // speed-sensitive keyboard steering smoothing
-    this.steerIn = smooth(this.steerIn || 0, steer, steer === 0 ? 12 : 7, STEP);
+    // speed-sensitive keyboard steering: quick at parking speed, progressive at speed
+    const sp = clamp(this.player.speed / 60, 0, 1);
+    this.steerIn = smooth(this.steerIn || 0, steer * (1 - 0.35 * sp), steer === 0 ? 12 : 7 - 4 * sp, STEP);
     inp.steer = this.steerIn; inp.throttle = thr; inp.brake = brk; inp.handbrake = hb; inp.nitro = nos;
     if (this.race && this.race.type === 'drag') {
       inp.steer = 0; inp.handbrake = false; inp.brake = 0;
@@ -211,6 +215,7 @@ class Game {
   }
   toggleSB() {
     if (this.sbActive) { this.sbActive = false; return; }
+    if (this.race) { this.hud.toast('SPEEDBREAKER: FREE ROAM ONLY'); return; }
     if (this.sbMeter > 0.15) { this.sbActive = true; this.audio.whoosh(); }
   }
   resetCar() {
@@ -284,7 +289,7 @@ class Game {
     const idx = Math.min(this.save.rivalIdx, 14);
     for (const ev of RIVAL_EVENTS[idx]) {
       if (this.save.won.includes(ev.id) && this.save.rivalIdx < 15) continue;
-      const r = new Race(this, ev); r.dispose();
+      const r = { start: raceStart(ev) };
       const col = { circuit: '#ffb030', sprint: '#ffd060', knockout: '#ff7030', tollbooth: '#40d0ff', speedtrap: '#60a0ff', drag: '#ff4060' }[ev.type];
       const m = { x: r.start.x, z: r.start.z, ev, color: col };
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 60, 20, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
@@ -333,6 +338,7 @@ class Game {
         reward = `Race ${d.k + 1} of ${DUELS[d.idx].length} won. ${rv.tag} wants a rematch.`;
         buttons = `<button class="big" data-act="nextduel">NEXT RACE ▸</button>`;
       } else if (res.won) {
+        this.defeatRival(d.idx);
         reward = `You beat ${rv.tag}. Rank #${rv.rank} is yours.`;
         buttons = `<button class="big" data-act="markers">CLAIM MARKERS ▸</button>`;
       } else {
@@ -352,7 +358,7 @@ class Game {
     }
     const rows = r.type === 'speedtrap' && r.trapTotals
       ? r.trapTotals.map((t, k) => `<tr class="${t.r.isPlayer ? 'me' : ''}"><td>${k + 1}</td><td>${t.r.name}</td><td>${this.fmtSpeed(t.total)}</td></tr>`).join('')
-      : r.standings().map((x, k) => `<tr class="${x.isPlayer ? 'me' : ''}"><td>${x.out ? 'OUT' : k + 1}</td><td>${x.name}</td><td>${x.done ? fmtTime(x.finishT) : x.out ? '—' : 'DNF'}</td></tr>`).join('');
+      : r.standings().map((x, k) => `<tr class="${x.isPlayer ? 'me' : ''}"><td>${x.out ? 'OUT' : k + 1}</td><td>${x.name}</td><td>${x.done ? fmtTime(x.finishT) : x.out ? '—' : res.won || x.isPlayer ? 'DNF' : 'RACING'}</td></tr>`).join('');
     this.persist();
     this.showPost(`<h1 class="${res.won ? 'win' : 'lose'}">${res.label}</h1><div class="sub">${ev.name.toUpperCase()} · ${TYPE_NAMES[ev.type]} · ${fmtTime(res.time)}</div>
       <table class="standings">${rows}</table><p class="reward">${reward}</p><div class="btns">${buttons}</div>`, (a) => {
@@ -363,7 +369,6 @@ class Game {
       else if (a === 'retryduel') this.startDuel(this.duel.idx);
       else if (a === 'markers') {
         const idx = this.duel.idx;
-        this.defeatRival(idx);
         this.endRace();
         showMarkers(this, idx, () => { this.duel = null; this.toMenu(); });
       }
@@ -528,8 +533,9 @@ class Game {
       if (imp > 3) { this.audio.impact(imp); this.shake = Math.min(1, this.shake + imp * 0.04); }
       if (b.kind === 'cop') {
         ev.hitCop = b;
-        const ratio = (p.mass * p.massMul) / b.mass;
-        pol.damage(b, Math.max(0, imp - 3.5) * 0.075 * ratio, true);
+        const ratio = Math.min(2, (p.mass * p.massMul) / b.mass);
+        const share = clamp((p.speed / (p.speed + b.speed + 1)) * 2, 0.25, 1); // a cop plowing into you hurts itself less
+        pol.damage(b, Math.max(0, imp - 6) * 0.05 * ratio * share, true);
         if (!pol.active && this.mode === 'roam' && imp > 2) pol.startPursuit(p, this.carEntry().heat, 'ramming');
       }
     } else if (a.kind === 'cop' && b.kind !== 'player') {
@@ -552,7 +558,7 @@ class Game {
     }
     // pursuit breakers
     if (pol.active) for (const b of this.world.breakers) {
-      if (b.state === 'ready' && p.speed > 10 && Math.hypot(p.pos.x - b.x, p.pos.z - b.z) < 7) {
+      if (b.state === 'ready' && p.speed > 10 && Math.hypot(p.pos.x - b.tx, p.pos.z - b.tz) < 9) {
         this.world.triggerBreaker(b);
         this.pendingBreakers.push({ b, t: 1.2 });
         this.audio.crash(); this.shake = 1;
@@ -563,9 +569,11 @@ class Game {
     if (p.speed > 25) for (const t of this.traffic.cars) {
       const d = Math.hypot(t.pos.x - p.pos.x, t.pos.z - p.pos.z);
       if (d > 12) { t.nm = false; continue; }
-      if (!t.nm && d < 4.4 && !t.free && (t.hitT === undefined || this.time - t.hitT > 1)) {
-        t.nm = true;
-        setTimeout(() => { if (t.hitT === undefined || this.time - t.hitT > 0.5) { this.sbMeter = Math.min(1, this.sbMeter + 0.1); this.hud.toast('NEAR MISS'); } }, 250);
+      if (!t.nm && d < 4.4 && !t.free && (t.hitT === undefined || this.time - t.hitT > 1)) { t.nm = true; t.nmT = this.time + 0.25; }
+      if (t.nmT && this.time >= t.nmT) {
+        // only counts if we didn't touch it in the meantime
+        if (t.hitT === undefined || t.hitT < t.nmT - 0.5) { this.sbMeter = Math.min(1, this.sbMeter + 0.1); this.hud.toast('NEAR MISS'); }
+        t.nmT = 0;
       }
     }
     // district callouts
@@ -592,18 +600,19 @@ class Game {
       while (this.acc >= STEP && n++ < 6) { this.step(STEP); this.acc -= STEP; }
       if (this.acc > STEP) this.acc = 0;
     }
+    const alpha = playing ? this.acc / STEP : 1;
     const simDt = playing ? dt * (this.sbActive ? 0.35 : 1) : dt;
     this.renderTime = (this.renderTime || 0) + simDt;
     // visuals
     const p = this.player;
-    p.sync();
+    p.sync(alpha);
     const ud = p.mesh.userData;
     ud.flames.visible = p.nitroOn;
     if (p.nitroOn) for (const f of ud.flames.children) f.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     for (const tl of ud.tail) tl.material.emissiveIntensity = p.input.brake > 0 && p.vLong > 0.5 ? 3 : 0.8;
-    this.traffic.sync();
-    this.police.sync(this.renderTime);
-    if (this.race) this.race.sync(this.renderTime);
+    this.traffic.sync(alpha);
+    this.police.sync(this.renderTime, alpha);
+    if (this.race) this.race.sync(this.renderTime, alpha);
     if (playing) this.emitParticles(simDt);
     this.particles.update(simDt);
     this.updateCamera(dt);
@@ -669,16 +678,15 @@ class Game {
     const fx = Math.sin(this.camHeading), fz = Math.cos(this.camHeading);
     const top = p.spec.top || 60;
     const sp = clamp(p.speed / top, 0, 1.2);
-    let pos, look;
+    const cx = p.mesh.position.x, cz = p.mesh.position.z, ch = p.mesh.rotation.y;
+    const look = _look;
     if (this.camMode === 2) {
-      pos = new THREE.Vector3(p.pos.x + Math.sin(p.heading) * 0.4, 1.15, p.pos.z + Math.cos(p.heading) * 0.4);
-      look = new THREE.Vector3(p.pos.x + Math.sin(p.heading) * 20, 1.0, p.pos.z + Math.cos(p.heading) * 20);
-      cam.position.copy(pos);
+      cam.position.set(cx + Math.sin(ch) * 0.4, 1.15, cz + Math.cos(ch) * 0.4);
+      look.set(cx + Math.sin(ch) * 20, 1.0, cz + Math.cos(ch) * 20);
     } else {
       const dist = (this.camMode === 1 ? 9.5 : 6.2) + sp * 0.8, h = this.camMode === 1 ? 3.4 : 2.0;
-      pos = new THREE.Vector3(p.pos.x - fx * dist, h, p.pos.z - fz * dist);
-      cam.position.lerp(pos, 1 - Math.exp(-14 * dt));
-      look = new THREE.Vector3(p.pos.x + fx * 4, 1.0, p.pos.z + fz * 4);
+      cam.position.lerp(_pos.set(cx - fx * dist, h, cz - fz * dist), 1 - Math.exp(-14 * dt));
+      look.set(cx + fx * 4, 1.0, cz + fz * 4);
     }
     this.shake = Math.max(0, this.shake - dt * 2.5);
     const sh = this.shake * 0.25 + (p.speed > 50 ? (p.speed - 50) * 0.0012 : 0) + (p.nitroOn ? 0.02 : 0);

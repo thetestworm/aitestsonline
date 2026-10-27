@@ -1,7 +1,8 @@
 // In-game HUD: tachometer, minimap radar, heat meter, pursuit monitor,
 // race info, toasts, banners and the dispatch radio log.
-import { BOUND, HALF, N, SP, ROAD_W, WALK, lineAt, districtOf } from './world.js';
-import { clamp, fmtMoney, fmtTime, MPH } from './util.js';
+import { BOUND, HALF, N, ROAD_W, lineAt } from './world.js';
+import { clamp, fmtMoney, fmtTime } from './util.js';
+import { RIVAL_MILESTONES, MS_TYPES } from './career.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,6 +70,14 @@ export class HUD {
       $('pm-bust').style.width = `${pp.bust * 50}%`;
       $('pursuit').classList.toggle('cooldown', cd);
       $('pursuit').classList.toggle('danger', pp.bust > 0.3);
+      // live progress on the current rival's open milestones
+      const idx = Math.min(14, G.save.rivalIdx);
+      const live = { length: pp.t, immob: pp.immob, roadblocks: pp.roadblocks, spikes: pp.spikes, cost: pp.cost, infractions: pp.infractions.size, bounty: pp.bounty, breakers: pp.breakers };
+      const html = RIVAL_MILESTONES[idx].filter((m) => !G.save.milestones.includes(m.id)).map((m) => {
+        const v = live[m.type], ok = v >= m.target;
+        return `<div class="${ok ? 'ok' : ''}">${MS_TYPES[m.type].label} ${MS_TYPES[m.type].fmt(Math.floor(Math.min(v, m.target)))} / ${MS_TYPES[m.type].fmt(m.target)}</div>`;
+      }).join('');
+      if (html !== this.msHtml) { $('ms-track').innerHTML = html; this.msHtml = html; }
     } else {
       $('b-bounty').textContent = G.save.bounty.toLocaleString('en-US');
       $('b-cost').textContent = fmtMoney(G.save.cash);
@@ -76,6 +85,7 @@ export class HUD {
     $('b-label1').textContent = inP ? 'PURSUIT BOUNTY' : 'BOUNTY';
     $('b-label2').textContent = inP ? 'COST TO STATE' : 'CASH';
     $('b-extra').style.display = inP ? '' : 'none';
+    $('ms-track').style.display = inP ? '' : 'none';
     // race info
     const r = G.race;
     $('raceinfo').classList.toggle('show', !!r);
@@ -90,7 +100,7 @@ export class HUD {
       }
       html += `<div class="ri-time">${fmtTime(r.t)}</div>`;
       if (r.type === 'drag') html += `<div class="ri-sub">GEAR ${p.gear + 1} · ↑/W SHIFT UP · ↓/S DOWN · ←→ LANE</div>`;
-      $('raceinfo').innerHTML = html;
+      if (html !== this.riHtml) { $('raceinfo').innerHTML = html; this.riHtml = html; }
       $('countdown').textContent = r.state === 'countdown' && r.count < 3 ? Math.ceil(r.count) : '';
     } else $('countdown').textContent = '';
     // prompt
