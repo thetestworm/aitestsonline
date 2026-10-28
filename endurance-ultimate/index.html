@@ -461,6 +461,7 @@ const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); ret
 const damp = (a, b, k, dt) => lerp(a, b, 1 - Math.exp(-k * dt));
 function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const G = 9.81, RHO = 1.225, KMH = 3.6;
+const LOAD_SENS = 0.085, PROFILE_MU = 0.985; // tyre load sensitivity & profile grip calibration (see speedProfile)
 const fmtLap = t => { if (!isFinite(t) || t <= 0) return '—'; const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(3); };
 const fmtClock = t => { t = Math.max(0, t); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = Math.floor(t) % 60; return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); };
 const fmtTod = h => { h = ((h % 24) + 24) % 24; return String(Math.floor(h)).padStart(2, '0') + ':' + String(Math.floor((h % 1) * 60)).padStart(2, '0'); };
@@ -476,9 +477,9 @@ const saveSettings = () => store.set('settings', SET);
 const EVENT = Object.assign({ session: 'race', length: 20, opponents: 19, skill: 0.92, tod: 18.5, timescale: 20, weather: 'dynamic', wear: 3, damage: true }, store.get('event', {}));
 
 const CLASSES = {
-  HY: { id: 'HY', name: 'Hypercar', short: 'HYP', color: '#e8173c', mass: 1060, power: 500e3, hybrid: 150e3, hybMin: 190 / KMH, cda: 1.10, cla: 3.35, aeroF: 0.46, mu: 1.62, rpmMax: 8600, idle: 1800, cyl: 8, vtop: 97, wb: 3.15, cgF: 0.47, abs: false, brakeF: 44000, bias: 0.565, fuel: { type: 'VE', cap: 100, perLap: 3.9, unit: '%' }, tc: 4, sound: { base: 0.9, rasp: 0.6, turbo: 0.35 } },
-  P2: { id: 'P2', name: 'LMP2', short: 'LMP2', color: '#2a72ff', mass: 950, power: 430e3, hybrid: 0, cda: 0.92, cla: 3.45, aeroF: 0.45, mu: 1.60, rpmMax: 8900, idle: 2000, cyl: 8, vtop: 91.5, wb: 3.01, cgF: 0.45, abs: false, brakeF: 40000, bias: 0.555, fuel: { type: 'L', cap: 75, perLap: 2.9, unit: 'L' }, tc: 3, sound: { base: 1.0, rasp: 1.0, turbo: 0 } },
-  GT: { id: 'GT', name: 'LMGT3', short: 'GT3', color: '#ff8a00', mass: 1320, power: 410e3, hybrid: 0, cda: 1.05, cla: 1.40, aeroF: 0.42, mu: 1.50, rpmMax: 9000, idle: 1500, cyl: 6, vtop: 84, wb: 2.72, cgF: 0.44, abs: true, brakeF: 31000, bias: 0.57, fuel: { type: 'L', cap: 100, perLap: 3.9, unit: 'L' }, tc: 5, sound: { base: 1.15, rasp: 0.8, turbo: 0.15 } },
+  HY: { id: 'HY', name: 'Hypercar', short: 'HYP', color: '#e8173c', mass: 1060, power: 500e3, hybrid: 150e3, hybMin: 190 / KMH, cda: 1.10, cla: 3.35, aeroF: 0.46, mu: 1.62, rpmMax: 8600, idle: 1800, cyl: 8, vtop: 97, wb: 3.15, cgF: 0.47, cgH: 0.30, track: 1.70, rollF: 0.55, abs: false, brakeF: 44000, bias: 0.565, fuel: { type: 'VE', cap: 100, perLap: 3.9, unit: '%' }, tc: 4, sound: { base: 0.9, rasp: 0.6, turbo: 0.35 } },
+  P2: { id: 'P2', name: 'LMP2', short: 'LMP2', color: '#2a72ff', mass: 950, power: 430e3, hybrid: 0, cda: 0.92, cla: 3.45, aeroF: 0.45, mu: 1.60, rpmMax: 8900, idle: 2000, cyl: 8, vtop: 91.5, wb: 3.01, cgF: 0.45, cgH: 0.29, track: 1.68, rollF: 0.55, abs: false, brakeF: 40000, bias: 0.555, fuel: { type: 'L', cap: 75, perLap: 2.9, unit: 'L' }, tc: 3, sound: { base: 1.0, rasp: 1.0, turbo: 0 } },
+  GT: { id: 'GT', name: 'LMGT3', short: 'GT3', color: '#ff8a00', mass: 1320, power: 410e3, hybrid: 0, cda: 1.05, cla: 1.40, aeroF: 0.42, mu: 1.50, rpmMax: 9000, idle: 1500, cyl: 6, vtop: 84, wb: 2.72, cgF: 0.44, cgH: 0.40, track: 1.66, rollF: 0.57, abs: true, brakeF: 31000, bias: 0.57, fuel: { type: 'L', cap: 100, perLap: 3.9, unit: 'L' }, tc: 5, sound: { base: 1.15, rasp: 0.8, turbo: 0.15 } },
 };
 const CLASS_ORDER = ['HY', 'P2', 'GT'];
 // Fictional manufacturers / cars. style params drive the procedural body.
@@ -648,22 +649,47 @@ function nearestGlobal(x, z) {
   TR.prof = {};
   for (const id of CLASS_ORDER) TR.prof[id] = speedProfile(CLASSES[id], 1.0);
 })();
+// Tyre load sensitivity (per wheel): grip coefficient falls as normalised load rises.
+// The AI profiles use the same model so player and AI pace stay matched.
+// Steady-state lateral capacity of a class at speed v using the same tyre model as the player car:
+// per-wheel loads (static + aero + lateral transfer split by roll stiffness), load-sensitive grip,
+// and the axle that saturates first (front share of lateral force = cgF). Rear also carries drive vs drag.
+function lateralCap(c, v, mu0, m) {
+  const down = 0.5 * RHO * c.cla * v * v, drag = 0.5 * RHO * c.cda * v * v, Fz0 = m * G * 0.25;
+  const FzF = m * G * c.cgF + down * c.aeroF, FzR = m * G * (1 - c.cgF) + down * (1 - c.aeroF);
+  const cap = (Fz, dF) => { const a = Fz / 2 + dF, b = Math.max(1, Fz / 2 - dF); return mu0 * (a * clamp(1 - LOAD_SENS * (a / Fz0 - 1), 0.6, 1.12) + b * clamp(1 - LOAD_SENS * (b / Fz0 - 1), 0.6, 1.12)); };
+  let ay = mu0 * (G + down / m);
+  for (let it = 0; it < 6; it++) {
+    const dLat = m * ay * c.cgH / c.track, dF = Math.min(dLat * c.rollF, FzF * 0.48), dR = Math.min(dLat * (1 - c.rollF), FzR * 0.48);
+    const cF = cap(FzF, dF), cR0 = cap(FzR, dR), cR = Math.sqrt(Math.max(0, cR0 * cR0 - drag * drag));
+    ay = lerp(ay, Math.min(cF / (m * c.cgF), cR / (m * (1 - c.cgF))), 0.7);
+  }
+  return ay;
+}
 function speedProfile(c, gripScale) {
-  const N = TR.N, v = new Float32Array(N), m = c.mass + 70, cl = 0.5 * RHO * c.cla, cd = 0.5 * RHO * c.cda, mu = c.mu * 0.94 * gripScale;
+  // reference mass: car + driver + about half a tank
+  const N = TR.N, v = new Float32Array(N), m = c.mass + 75 + c.fuel.cap * 0.33, cl = 0.5 * RHO * c.cla, cd = 0.5 * RHO * c.cda, mu0 = c.mu * PROFILE_MU * gripScale;
+  const aLS = LOAD_SENS * cl / (m * G);
+  const muAt = vv => mu0 * Math.max(0.6, 1 - aLS * vv * vv);
+  // lateral capacity table every 1 m/s, then corner speed by bisection on v^2 k = cap(v)
+  const capT = new Float32Array(Math.ceil(c.vtop) + 2); for (let s = 0; s < capT.length; s++) capT[s] = lateralCap(c, s, mu0, m);
+  const capAt = vv => { const f = clamp(vv, 0, capT.length - 1.001), i0 = Math.floor(f); return lerp(capT[i0], capT[i0 + 1], f - i0); };
   for (let i = 0; i < N; i++) {
-    const k = Math.abs(TR.rk[i]) + 1e-5, den = k - mu * cl / m;
-    v[i] = den <= 0 ? c.vtop : Math.min(c.vtop, Math.sqrt(mu * G / den));
+    const k = Math.abs(TR.rk[i]) + 1e-5;
+    if (c.vtop * c.vtop * k <= capAt(c.vtop)) { v[i] = c.vtop; continue; }
+    let lo = 3, hi = c.vtop; for (let it = 0; it < 22; it++) { const mid = (lo + hi) / 2; if (mid * mid * k <= capAt(mid)) lo = mid; else hi = mid; }
+    v[i] = lo;
   }
   const Ptot = (c.power + c.hybrid * 0.8) * 0.9;
   for (let rep = 0; rep < 2; rep++) {
     for (let n = 0; n < N; n++) { // forward: acceleration
       const i = n % N, j = (n + 1) % N, vi = Math.max(v[i], 5);
-      const a = Math.min(mu * G * 0.85, (Ptot / vi - cd * vi * vi) / m);
+      const a = Math.min(muAt(vi) * G * 0.85, (Ptot / vi - cd * vi * vi) / m);
       v[j] = Math.min(v[j], Math.sqrt(vi * vi + 2 * Math.max(a, 0) * TR.DS));
     }
     for (let n = 2 * N; n > 0; n--) { // backward: braking
       const i = n % N, j = (n - 1) % N, vi = v[i];
-      const a = Math.min(mu * 0.92 * (G + cl * vi * vi / m), c.brakeF * 0.9 / m) + cd * vi * vi / m;
+      const a = Math.min(muAt(vi) * 0.92 * (G + cl * vi * vi / m), c.brakeF * 0.9 / m) + cd * vi * vi / m;
       v[j] = Math.min(v[j], Math.sqrt(vi * vi + 2 * a * TR.DS));
     }
   }
@@ -1399,21 +1425,33 @@ function axleForce(Fz, mu, alpha, FxD, tcF, abs, out) {
 }
 const _af = {}, _ar = {};
 function enginePower(car, rpm) { const x = rpm / car.c.rpmMax; const f = x < 0.88 ? 1 - ((0.88 - x) / 0.88) ** 2 * 1.05 : 1 - (x - 0.88) * 0.6; return car.power * clamp(f, 0.12, 1); }
+const _fz = new Float32Array(4), _mw = new Float32Array(4);
 function stepPlayer(car, dt, inp) {
-  const c = car.c, m = car.mass, L = c.wb, a = L * (1 - c.cgF), b = L * c.cgF, h = 0.31, Iz = m * a * b * 1.08, rw = car.model.rw;
+  const c = car.c, m = car.mass, L = c.wb, a = L * (1 - c.cgF), b = L * c.cgF, h = c.cgH, Iz = m * a * b * 1.08, rw = car.model.rw;
   const cy = Math.cos(car.yaw), sy = Math.sin(car.yaw);
   let u = car.vx * cy + car.vz * sy, w = -car.vx * sy + car.vz * cy;
   const spd = Math.hypot(u, w);
   const wing = car.setup.wing, cla = car.cla * (1 + 0.045 * wing) * (1 - 0.3 * car.dmg.aero), cda = car.cda * (1 + 0.03 * wing) * (1 + 0.12 * car.dmg.aero);
   const q = 0.5 * RHO * u * u, down = q * cla, drag = q * cda * Math.sign(u);
+  // axle loads: static + aero + longitudinal transfer
   let Fzf = m * G * b / L + down * c.aeroF - m * car.ax * h / L, Fzr = m * G * a / L + down * (1 - c.aeroF) + m * car.ax * h / L;
   Fzf = Math.max(Fzf, 300); Fzr = Math.max(Fzr, 300);
-  // tyre/surface grip per axle
-  const sm = k => SURF[car.surf[k]].mu, T = car.tyres, wet = WX.wet;
-  const gF = c.mu * 0.5 * (tyreGrip(car.comp, T[0].t, T[0].w, wet) * sm(0) + tyreGrip(car.comp, T[1].t, T[1].w, wet) * sm(1));
-  const gR = c.mu * 0.5 * (tyreGrip(car.comp, T[2].t, T[2].w, wet) * sm(2) + tyreGrip(car.comp, T[3].t, T[3].w, wet) * sm(3));
-  const loadSens = Fz => clamp(1 - 0.065 * (Fz / (m * G * 0.5) - 1), 0.8, 1.04);
-  const muF = gF * loadSens(Fzf), muR = gR * loadSens(Fzr);
+  // lateral load transfer, split by roll stiffness (front share c.rollF). ay > 0 = accelerating to the right -> left wheels (0, 2) gain load
+  const dLat = m * car.ay * h / c.track, dF = clamp(dLat * c.rollF, -Fzf * 0.48, Fzf * 0.48), dR = clamp(dLat * (1 - c.rollF), -Fzr * 0.48, Fzr * 0.48);
+  const fz = _fz; fz[0] = Fzf / 2 + dF; fz[1] = Fzf / 2 - dF; fz[2] = Fzr / 2 + dR; fz[3] = Fzr / 2 - dR;
+  // per-wheel grip: compound/temperature/wear x surface x load sensitivity; kerbs & grass add a bump signature
+  const T = car.tyres, wet = WX.wet, Fz0 = m * G * 0.25;
+  for (let k = 0; k < 4; k++) {
+    const sf = car.surf[k]; let bump = 0;
+    if (sf === 'kerb') bump = 0.22 * Math.sin(car.s * 5.2 + k * 1.3); else if (sf === 'grass' || sf === 'gravel') bump = 0.3 * (noise1(car.s * 1.9 + k * 17) - 0.5);
+    fz[k] *= 1 + bump;
+    _mw[k] = c.mu * tyreGrip(car.comp, T[k].t, T[k].w, wet) * SURF[sf].mu * clamp(1 - LOAD_SENS * (fz[k] / Fz0 - 1), 0.6, 1.12);
+    T[k].fz = fz[k];
+  }
+  // axle peak force = sum of per-wheel peaks; expressed as an effective axle mu for the combined-slip model
+  const FzF = fz[0] + fz[1], FzR = fz[2] + fz[3];
+  const muF = (_mw[0] * fz[0] + _mw[1] * fz[1]) / FzF, muR = (_mw[2] * fz[2] + _mw[3] * fz[3]) / FzR;
+  Fzf = FzF; Fzr = FzR;
   // steering (input already filtered); speed-sensitive lock
   let lock = 0.36;
   if (SET.steerAid) { const aMax = muF * (G + down / m), lim = Math.atan(L * aMax / Math.max(u * u, 1)) + 0.09; lock = Math.min(0.36, lim * 1.05); }
@@ -1424,6 +1462,7 @@ function stepPlayer(car, dt, inp) {
   // engine & drivetrain
   let thr = inp.thr;
   if (car.limiter && u > 16.1) thr *= clamp((16.6 - u) / 0.5, 0, 1);
+  if (car.gear < 0 && u < -7) thr *= clamp((u + 9) / 2, 0, 1); // reverse is limited to ~30 km/h
   if (car.shiftT > 0) thr = 0;
   const ratio = car.gear > 0 ? car.ratios[car.gear - 1] : car.gear < 0 ? -car.ratios[0] * 1.2 : 0;
   const wheelRpm = Math.abs(u) / rw * 60 / (Math.PI * 2);
@@ -1436,9 +1475,12 @@ function stepPlayer(car, dt, inp) {
   if (ratio) { const pw = enginePower(car, Math.max(car.rpm, 2600)), omega = Math.max(car.rpm, 2600) * Math.PI * 2 / 60; Fd = thr * pw / omega * Math.abs(ratio) / rw * 0.9 * Math.sign(ratio); }
   // hybrid deployment (front axle) & regen
   let Fh = 0; car.hybDeploy = 0; car.regen = 0;
-  if (c.hybrid && u > c.hybMin && thr > 0.85 && car.hyb > 0.01 && car.gear > 0) { Fh = c.hybrid * thr / u; car.hyb -= c.hybrid * dt / 3.2e6; car.hybDeploy = 1; }
-  // brakes
-  const bias = car.setup.bias, Fb = inp.brk * c.brakeF * (car.brakeT[0] > 900 ? 0.85 : 1);
+  // front-axle MGU deploys above hybMin; power tapers as the store runs low (energy management)
+  if (c.hybrid && u > c.hybMin && thr > 0.85 && car.hyb > 0.01 && car.gear > 0) { const pw = c.hybrid * thr * (0.35 + 0.65 * smooth(0.04, 0.35, car.hyb)); Fh = pw / u; car.hyb -= pw * dt / 3.2e6; car.hybDeploy = 1; }
+  // brakes: carbon discs need temperature (cold ~10% less bite) and fade when overheated
+  const bT = (car.brakeT[0] + car.brakeT[1]) * 0.5, bFac = lerp(0.92, 1, smooth(80, 300, bT)) * (1 - 0.25 * smooth(850, 1100, bT));
+  const bias = car.setup.bias, Fb = inp.brk * c.brakeF * bFac;
+  // regen on the front axle under braking (up to 200 kW)
   if (c.hybrid && inp.brk > 0.05 && u > 8) { const pr = Math.min(200e3, Fb * bias * u * 0.4); car.hyb = Math.min(1, car.hyb + pr * dt / 3.2e6 * 0.85); car.regen = 1; }
   const sg = Math.abs(u) > 0.2 ? Math.sign(u) : 0;
   const absOn = (car.setup.abs > 0 && c.abs) || (SET.brakeAid && !c.abs);
@@ -1471,7 +1513,7 @@ function stepPlayer(car, dt, inp) {
   car.ax = damp(car.ax, axb, 12, dt); car.ay = damp(car.ay, ayb, 12, dt); car.u = u; car.w = w; car.speed = Math.hypot(car.vx, car.vz);
   car.wheelRot += u * dt / rw; car.thrEff = thr; car.delta = delta;
   // brake heat
-  for (let k = 0; k < 4; k++) { const share = k < 2 ? bias * 0.5 : (1 - bias) * 0.5; car.brakeT[k] += (Fb * share * Math.abs(u) * 2.2e-5 - (car.brakeT[k] - WX.ambientC) * 0.012 * (1 + Math.abs(u) / 25)) * dt * 10; }
+  for (let k = 0; k < 4; k++) { const share = k < 2 ? bias * 0.5 : (1 - bias) * 0.5; car.brakeT[k] += (Fb * share * Math.abs(u) * 2.4e-4 - (car.brakeT[k] - WX.ambientC) * (0.022 + Math.abs(u) * 0.0011) - (car.brakeT[k] > 700 ? (car.brakeT[k] - 700) * 0.05 : 0)) * dt; }
 }
 
 // per-frame: projection, surfaces, walls, auto gears, tyres & fuel
@@ -1508,12 +1550,15 @@ function playerFrame(car, dt, inp) {
   const vel = car.speed, lat = Math.abs(car.ay) / G, lon = Math.abs(car.ax) / G, wm = EVENT.wear;
   for (let k = 0; k < 4; k++) {
     const T = car.tyres[k], front = k < 2, right = k % 2 === 1;
-    let load = 0.25 + (front ? -1 : 1) * car.ax / G * 0.08 + (right ? 1 : -1) * car.ay / G * 0.1; load = clamp(load, 0.05, 0.5); T.load = load;
+    const fzs = car.tyres[0].fz + car.tyres[1].fz + car.tyres[2].fz + car.tyres[3].fz;
+    const load = clamp(fzs > 0 ? (T.fz || 0) / fzs : 0.25, 0.03, 0.6); T.load = load;
     const slide = front ? car.slideF : car.slideR, spin = (!front && car.spinR) || (front && car.lockF);
     const work = ((lat + lon * 0.7) * load * 4 * (0.3 + vel / 45) + slide * 1.4 + (spin ? 1.6 : 0) + (car.onKerb ? 0.3 : 0)) * smooth(0.5, 4, vel);
-    const cool = (T.t - WX.trackC * 0.6 - WX.ambientC * 0.4) * 0.016 * (0.6 + vel / 40) * (1 + WX.wet * (car.comp === 'W' ? 0.8 : 2.2));
-    T.t = clamp(T.t + (work * 1.45 - cool) * dt, 10, 165);
-    const C = COMPOUNDS[car.comp], over = Math.max(0, T.t - C.opt - 18) * 0.02, dryWet = car.comp === 'W' ? (1 - WX.wet) * 2.5 : 0;
+    // carcass temperature: slow-ish heat soak, convective cooling grows gently with speed
+    const cool = (T.t - WX.trackC * 0.6 - WX.ambientC * 0.4) * 0.0085 * (0.8 + vel / 60) * (1 + WX.wet * (car.comp === 'W' ? 0.8 : 2.2));
+    const C = COMPOUNDS[car.comp], coldBoost = 1 + 0.9 * smooth(C.opt - 12, C.opt - 40, T.t); // cold rubber warms faster
+    T.t = clamp(T.t + (work * 0.85 * coldBoost - cool) * dt, 10, 165);
+    const over = Math.max(0, T.t - C.opt - 18) * 0.02, dryWet = car.comp === 'W' ? (1 - WX.wet) * 2.5 : 0;
     T.w = Math.max(0, T.w - wm * dt * 2.05e-4 * C.wear * (0.25 + work * 0.38 + over + dryWet) * (vel > 1 ? 1 : 0));
   }
   // fuel / virtual energy
@@ -1596,7 +1641,7 @@ function updateAI(car, dt, field, race) {
   }
   if (car.passT > 0) { car.passT -= dt; if (car.passLat !== null) latT = car.passLat; if (car.passT <= 0) car.passLat = null; }
   // --- longitudinal ---
-  const m = car.mass, cl = 0.5 * RHO * car.cla, cd = 0.5 * RHO * car.cda, mu = c.mu * grip;
+  const m = car.mass, cl = 0.5 * RHO * car.cla, cd = 0.5 * RHO * car.cda, mu = c.mu * PROFILE_MU * grip * Math.max(0.6, 1 - LOAD_SENS * cl * car.v * car.v / (m * G));
   if (car.v < vT) { const Pw = (car.power + (c.hybrid && car.v > c.hybMin ? c.hybrid * 0.8 : 0)) * 0.9; const acc = Math.min(mu * G * 0.85, (Pw / Math.max(car.v, 4) - cd * car.v * car.v) / m - 0.12); car.v = Math.min(vT, car.v + Math.max(acc, 0) * dt); car.thr = 1; car.brk = 0; }
   else { const dec = Math.min(mu * 0.92 * (G + cl * car.v * car.v / m), c.brakeF * 0.9 / m) + cd * car.v * car.v / m; const nv = Math.max(vT, car.v - dec * dt); car.brk = car.v - nv > 0.02 ? clamp((car.v - nv) / (dec * dt), 0, 1) : 0; car.thr = car.brk > 0 ? 0 : 0.6; car.v = nv; }
   // --- lateral ---
@@ -2506,7 +2551,7 @@ async function boot() {
   composer.render();
   await progress(1, 'Ready');
   showScreen('scr-main', false);
-  window.__E24 = { RACE, TR, WX, SET, EVENT, launch, startSession, stepPlayer, get SELECT() { return SELECT; }, CLASSES, PROF, profileLapTime, camera, scene, renderer, KEYS, simulate, standings };
+  window.__E24 = { RACE, TR, WX, SET, EVENT, launch, startSession, stepPlayer, LOAD_SENS, PROFILE_MU, lateralCap, get SELECT() { return SELECT; }, CLASSES, PROF, profileLapTime, camera, scene, renderer, KEYS, simulate, standings };
 }
 requestAnimationFrame(loop);
 boot().catch(e => { console.error(e); $('load-msg').textContent = 'Error: ' + e.message; });
