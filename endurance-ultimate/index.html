@@ -2121,10 +2121,11 @@ function buildCockpit(car) {
   const beam = (a, b, t) => { const d = new THREE.Vector3().subVectors(b, a), m = new THREE.Mesh(new THREE.BoxGeometry(t, d.length(), t), frame); m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); g.add(m); };
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   if (isGT) { for (const sz of [-1, 1]) beam(V(0.62, 0.8, sz * 0.66), V(0.12, roofY - 0.04, sz * 0.5), 0.05); beam(V(0.1, roofY - 0.035, -0.5), V(0.1, roofY - 0.035, 0.5), 0.03);
-    const liner = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.02, 1.08), frame); liner.position.set(-0.5, roofY - 0.05, 0); g.add(liner); } // dark headliner instead of seeing the painted roof from inside
+    const liner = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.02, 1.12), frame); liner.position.set(-0.45, roofY - 0.115, 0); g.add(liner); } // dark headliner instead of seeing the painted roof from inside
   else { for (const sz of [-1, 1]) beam(V(0.98, 0.5, sz * 0.4), V(0.02, roofY - 0.02, sz * 0.3), 0.035); beam(V(0.0, roofY - 0.015, -0.3), V(0.0, roofY - 0.015, 0.3), 0.025); }
   // dashboard
-  const dash = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, isGT ? 1.4 : 0.8), M); dash.position.set(eyeX + 0.8, eyeY - 0.3, 0); g.add(dash);
+  const dash = isGT ? new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.14, 1.5), frame) : new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.8), M); if (isGT) dash.position.set(eyeX + 0.86, eyeY - 0.2, 0); else dash.position.set(eyeX + 0.8, eyeY - 0.3, 0); g.add(dash);
+  if (isGT) { const top = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.03, 1.36), frame); top.position.set(eyeX + 0.45, eyeY - 0.1, 0); g.add(top); } // dashboard top / cowl covering the painted body under the windscreen
   // steering wheel
   const wheel = new THREE.Group(); wheel.position.set(eyeX + 0.44, eyeY - 0.2, eyeZ); wheel.rotation.z = 0.32;
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.022, 8, 24, Math.PI * 1.3), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 })); rim.rotation.y = Math.PI / 2; rim.rotation.x = -Math.PI * 0.15 - Math.PI / 2 + Math.PI * 0.35; wheel.add(rim);
@@ -2239,7 +2240,7 @@ function updateCamera(dt, car, lookBack) {
     fov = SET.fov;
   }
   CAMST.snap = false;
-  camera.near = C.onboard ? 0.12 : 0.5;
+  camera.near = id === 'cockpit' ? 0.04 : C.onboard ? 0.12 : 0.5;
   // keep a sensible horizontal field of view on portrait / narrow screens
   if (camera.aspect < 1.3) fov = Math.min(115, 2 * Math.atan(Math.tan(fov * Math.PI / 360) * 1.3 / camera.aspect) * 180 / Math.PI);
   camera.fov = CAMST.snapFov ? fov : damp(camera.fov, fov, 6, dt); CAMST.snapFov = false; camera.updateProjectionMatrix();
